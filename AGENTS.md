@@ -5,6 +5,16 @@ Codex 在這個工作區的入口。**先讀這兩份**，這裡只列 Codex 專
 - 跟 Claude Code 協作的共同規則（角色分工、review 流程、問題解決原則、動工/收工流程）→ [AI_COLLABORATION.md](AI_COLLABORATION.md)
 - 專案目錄架構、分支與 commit 慣例、任務板 → [README.md](README.md)、[docs/coordination.md](docs/coordination.md)
 
+## 可用 skills
+
+工作區 skills 位於 `.agents/skills/<name>/SKILL.md`（Claude Code 對應 `.claude/skills/<name>/`，兩側同步，見 [docs/guides/skill-creation-sop.md](docs/guides/skill-creation-sop.md)）。任務符合某個 skill 的用途時，動手前先完整讀取該 skill。
+
+<!-- skill-list:start — 新增／刪除 skill 時必須同步更新這份清單（skill-creation-sop.md §3、§6） -->
+
+（目前無工作區 skill）
+
+<!-- skill-list:end -->
+
 ## Codex 專屬慣例
 
 - 角色：獨立 reviewer / challenger / technical auditor / failure mode finder。**不是第二個執行者**——工作是找 Claude Code 方案裡的問題（正確性、邊界情況、安全性、效能、可維護性），不是分擔實作量。

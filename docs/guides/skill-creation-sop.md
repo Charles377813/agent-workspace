@@ -13,7 +13,7 @@
 - 會**重複**發生，不是一次性任務。
 - 有**固定流程或產出格式**，寫下來能省去每次重新推導。
 - 目前 Claude 預設行為做不好，或容易漏步驟。
-- 職責跟現有 skill **不重疊**（先看 `.claude/skills/` 既有清單）。
+- 職責跟現有 skill **不重疊**（先看 `AGENTS.md` 的 skill 具名清單，或直接列 `.claude/skills/`）。
 
 大致原則：只有「重複」一項成立、其他都不明顯時，通常還不值得做成 skill；反過來若某一項特別強（例如產出格式很固定、或預設行為常出錯），單項也可能就夠。拿不準時列出你的判斷交使用者定。skill 太多會稀釋觸發準確度、增加維護負擔。
 
@@ -95,20 +95,35 @@ skill-name/
 本工作區的決定是：**同一個 skill 由兩側共用一份內容**，不是各平台各自維護。
 
 - Claude Code 自動載入 `.claude/skills/<name>/`。
-- 其他 agent（Codex 等）沒有引擎級的專案 skill 自動發現；靠 `AGENTS.md` 明文指路到 `.agents/skills/<name>/`，並要求「符合用途時動手前先完整讀取該 skill」。新增 skill 時，若 `AGENTS.md` 的可用 skill 清單需要補一行，一併補。
+- 其他 agent（Codex 等）沒有引擎級的專案 skill 自動發現，靠 `AGENTS.md` 指路。`AGENTS.md` 有一段以 `<!-- skill-list:start -->` / `<!-- skill-list:end -->` 標記的**具名清單**，列出每個工作區 skill 的名稱、一句用途、路徑。Codex 讀 `AGENTS.md` 才知道有哪些 skill、何時該讀。
 
-**改任何一個 skill（新增／修改／刪除），兩側必須完全一致**：不是只複製 `SKILL.md`，而是複製**整個 `<name>/` 目錄**——含 `scripts/`、`references/`、`assets/`、以及任何 agent 專屬設定檔。只同步主檔會讓另一側缺相依資源而靜默失效。刪除 skill 則兩側目錄都刪，並在 `AGENTS.md` 移除對應清單行。
+**新增或刪除 skill 時，必須同步更新 `AGENTS.md` 的具名清單**（新增就加一行 `- \`<name>\` — <一句用途>`，刪除就移除該行）。這不是「需要才補」——清單沒更新，等於 Codex 看不到這個 skill，SOP 第 1 節的「先看既有清單避免重疊」也會失準。清單為空時保留標記並寫「（目前無工作區 skill）」。
 
-檢查（PowerShell 沒有 `diff -r`，用 git，兩側環境都有）：
+**改任何一個 skill（新增／修改／刪除），兩側目錄必須完全一致**：不是只複製 `SKILL.md`，而是複製**整個 `<name>/` 目錄**——含 `scripts/`、`references/`、`assets/`、以及任何 agent 專屬設定檔。只同步主檔會讓另一側缺相依資源而靜默失效。刪除 skill 則兩側目錄都刪。
+
+### 一致性檢查
+
+PowerShell 沒有 `diff -r`；`git diff --no-index` 兩個環境都有，但**兩者判斷 exit code 的方式不同**，分開用：
+
+Bash：
 
 ```bash
 git diff --no-index --stat -- .claude/skills .agents/skills
 echo "exit=$?"
 ```
 
-- `exit=0`：兩側檔案樹與內容完全一致。
-- `exit=1`：有差異，`--stat` 列出是哪些檔。
-- 某側目錄不存在時會明確報 `does not exist`，不會靜默當成一致。
+PowerShell（`$?` 是布林值 `True`/`False`，不是數字——要看 exit code 用 `$LASTEXITCODE`）：
+
+```powershell
+git diff --no-index --stat -- .claude/skills .agents/skills
+"exit=$LASTEXITCODE"
+```
+
+兩者結果一致：
+
+- exit `0`：兩側檔案樹與內容完全一致。
+- exit `1`：有差異，`--stat` 列出是哪些檔。
+- 某側目錄不存在時 git 會明確報 `does not exist`，不會靜默當成一致。
 
 ---
 
@@ -150,7 +165,8 @@ skill 寫好後，可針對 description 做觸發測試：
 - [ ] body 祈使語氣、有解釋 why、無多餘全大寫 MUST
 - [ ] SKILL.md 夠精簡；長到像參考手冊的部分已拆 `references/` 並指路
 - [ ] 固定產出格式已用模板寫死
-- [ ] 職責跟既有 skill 不重疊
-- [ ] 兩側整個 `<name>/` 目錄一致（`git diff --no-index --stat -- .claude/skills .agents/skills` exit 0）；`AGENTS.md` 清單已同步（新增/刪除時）
+- [ ] 職責跟既有 skill 不重疊（對照 `AGENTS.md` 的 skill 具名清單）
+- [ ] 兩側整個 `<name>/` 目錄一致（`git diff --no-index` exit 0，判斷方式見 §3：Bash 用 `$?`、PowerShell 用 `$LASTEXITCODE`）
+- [ ] `AGENTS.md` 的 `skill-list` 具名清單已同步（新增加行、刪除移行）
 - [ ] 測試 prompt 在乾淨 session 跑過（若適用），使用者已確認產出
 - [ ] `docs/decisions.md` 記一行：新增/修改/刪除了哪個 skill、為什麼
