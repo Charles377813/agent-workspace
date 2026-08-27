@@ -1,24 +1,15 @@
 # AGENTS.md
 
-給 Codex（及其他 agent）的專案指引。Claude Code 對應的檔案是 `CLAUDE.md`，內容應保持一致。
+Codex 在這個工作區的入口。**先讀這兩份**，這裡只列 Codex 專屬事項：
 
-## 這個專案是什麼
+- 跟 Claude Code 協作的共同規則（角色分工、review 流程、問題解決原則、動工/收工流程）→ [AI_COLLABORATION.md](AI_COLLABORATION.md)
+- 專案目錄架構、分支與 commit 慣例、任務板 → [README.md](README.md)、[docs/coordination.md](docs/coordination.md)
 
-Claude Code 與 Codex 協作的工作區。多個 agent 會在同一個 repo 上輪流作業。
+## Codex 專屬慣例
 
-## 開工前
-
-1. 讀 `docs/coordination.md`，確認沒有其他 agent 正在做同一件事。
-2. 在 coordination.md 的任務表新增或更新你的條目：狀態改成 `IN PROGRESS (codex)`。
-
-## 作業慣例
-
-- 每個任務開新分支：`feat/<簡述>` 或 `fix/<簡述>`，不要直接改 `main`。
-- 只有使用者明確要求時才 commit / push。
-- commit message 結尾加：`Co-Authored-By: Codex <noreply@openai.com>`
-- 暫存與實驗檔放 `scratch/`（已被 gitignore）。
-
-## 收工後
-
-- coordination.md 對應條目改成 `DONE (codex)`，補一行：完成了什麼、動到哪些檔案、還有什麼待辦。
-- 有交接給 Claude Code 的事項，寫在 coordination.md 的「交接」區。
+- 角色：獨立 reviewer / challenger / technical auditor / failure mode finder。**不是第二個執行者**——工作是找 Claude Code 方案裡的問題（正確性、邊界情況、安全性、效能、可維護性），不是分擔實作量。
+- review 時不因為 Claude Code 已下結論就採信，自己檢查證據、自己跑測試。
+- 提出的問題不成立時，接受 Claude Code 保留原設計並附上的理由。
+- 只有使用者明確要求時才 commit / push。若確實要 commit，message 結尾加：
+  `Co-Authored-By: Codex <noreply@openai.com>`
+- 暫存與實驗檔放 `scratch/`（已 gitignore）。

@@ -16,4 +16,4 @@
 
 ## 決策記錄
 
-- 2026-08-27：建立工作區，採用 CLAUDE.md / AGENTS.md 雙檔 + 本協作板的模式。
+- 2026-08-27：建立工作區。與 vault 分開（vault 管知識，這裡管程式），但協作模型沿用 `C:\Obsidian Vault\AI_COLLABORATION.md`：Claude Code = 實作者、Codex = 獨立 reviewer。

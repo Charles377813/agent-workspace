@@ -1,24 +1,16 @@
 # CLAUDE.md
 
-給 Claude Code 的專案指引。Codex 對應的檔案是 `AGENTS.md`，內容應保持一致。
+Claude Code 在這個工作區的入口。**先讀這兩份**，這裡只列 Claude Code 專屬事項：
 
-## 這個專案是什麼
+- 跟 Codex 協作的共同規則（角色分工、review 流程、問題解決原則、動工/收工流程）→ [AI_COLLABORATION.md](AI_COLLABORATION.md)
+- 專案目錄架構、分支與 commit 慣例、任務板 → [README.md](README.md)、[docs/coordination.md](docs/coordination.md)
 
-Claude Code 與 Codex 協作的工作區。多個 agent 會在同一個 repo 上輪流作業。
+## Claude Code 專屬慣例
 
-## 開工前
-
-1. 讀 `docs/coordination.md`，確認沒有其他 agent 正在做同一件事。
-2. 在 coordination.md 的任務表新增或更新你的條目：狀態改成 `IN PROGRESS (claude)`。
-
-## 作業慣例
-
-- 每個任務開新分支：`feat/<簡述>` 或 `fix/<簡述>`，不要直接改 `main`。
-- 只有使用者明確要求時才 commit / push。
-- commit message 結尾加：`Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
-- 暫存與實驗檔放 `scratch/`（已被 gitignore）。
-
-## 收工後
-
-- coordination.md 對應條目改成 `DONE (claude)`，補一行：完成了什麼、動到哪些檔案、還有什麼待辦。
-- 有交接給 Codex 的事項，寫在 coordination.md 的「交接」區。
+- 角色：分析 / 設計 / 實作 / refactor，走完整條問題解決鏈（見 AI_COLLABORATION.md）。
+- 每個任務開新分支 `feat/<簡述>` 或 `fix/<簡述>`，不直接改 `main`。
+- 只有使用者明確要求時才 commit / push。commit message 結尾加：
+  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
+- 實作前設計已核准的話，用 `worktree-implementation-start` skill 開隔離 worktree。
+- 暫存與實驗檔放 `scratch/`（已 gitignore）。
+- 交出去給 Codex review 前，自己先跑過測試、確認能建置。
