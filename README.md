@@ -9,7 +9,9 @@ Claude Code 與 Codex 協作用的專案工作區。
 | `AI_COLLABORATION.md` | Claude Code / Codex 協作的共同規則來源（角色分工、review 流程） |
 | `CLAUDE.md` | Claude Code 專屬入口 |
 | `AGENTS.md` | Codex 專屬入口 |
-| `docs/coordination.md` | 共用任務板 / 交接記錄，兩邊都在這裡同步進度 |
+| `docs/coordination.md` | 共用任務板 / 交接記錄 |
+| `docs/decisions.md` | 技術選型與流程決策歷史 |
+| `docs/tasks/` | 每個任務一個檔，用 `_TEMPLATE.md` |
 | `src/` | 實際程式碼 |
 | `scratch/` | 暫時檔案、實驗、草稿（不進版控） |
 
