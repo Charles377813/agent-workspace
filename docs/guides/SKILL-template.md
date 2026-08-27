@@ -1,7 +1,7 @@
 # SKILL.md 範本
 
 複製下面整段到 `.claude/skills/<skill-name>/SKILL.md`，替換角括號內容，刪掉「說明：」註解行。
-完成後同步複製到 `.agents/skills/<skill-name>/SKILL.md`。
+完成後把**整個 skill 目錄**（含 `scripts/`、`references/`、`assets/`）同步複製到 `.agents/skills/<skill-name>/`，不是只複製 `SKILL.md`。
 
 ---
 
@@ -37,7 +37,7 @@ description: <一句話說明做什麼>。使用時機：使用者<講 A>、<講
 
 ## 範例
 
-說明：2～3 個實例，幫模型抓到分寸。
+說明：放幾個實例幫模型抓到分寸，數量看需要；產出格式很單純時可以整段省略。
 
 **範例 1**
 Input: <使用者的輸入>
