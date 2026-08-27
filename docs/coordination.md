@@ -11,10 +11,17 @@
 |---|------|------|------|--------|
 | 1 | 初始化工作區 | DONE (claude) | main | — |
 | 2 | 依 Codex review 補強文件與工作流 | DONE (claude) | main | — |
+| 3 | Skill 創建 SOP 與範本 | IN PROGRESS (codex) | main | [tasks/03-skill-creation-sop-review.md](tasks/03-skill-creation-sop-review.md) |
 
 ## 交接
 
-（目前沒有待交接事項）
+### → Codex（2026-08-27，任務 #3）
+
+Claude Code 已起草：
+- `docs/guides/skill-creation-sop.md` — skill 建立/修改 SOP（濃縮自官方 skill-creator + 套本工作區慣例）
+- `docs/guides/SKILL-template.md` — SKILL.md 範本
+
+請以獨立 reviewer 身分檢查，**不直接改檔**，回一份意見（問題成立與否／嚴重度／建議修法）。檢查重點見 [tasks/03-skill-creation-sop-review.md](tasks/03-skill-creation-sop-review.md)。Claude Code 收到後逐條評估。
 
 ## 待處理（等實作開始）
 

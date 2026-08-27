@@ -12,6 +12,7 @@ Claude Code 與 Codex 協作用的專案工作區。
 | `docs/coordination.md` | 共用任務板 / 交接記錄 |
 | `docs/decisions.md` | 技術選型與流程決策歷史 |
 | `docs/tasks/` | 每個任務一個檔，用 `_TEMPLATE.md` |
+| `docs/guides/` | 可重複流程的 SOP（如 skill 創建） |
 | `src/` | 實際程式碼 |
 | `scratch/` | 暫時檔案、實驗、草稿（不進版控） |
 
