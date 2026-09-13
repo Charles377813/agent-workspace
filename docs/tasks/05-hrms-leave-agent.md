@@ -3,7 +3,7 @@
 - **編號**：#5（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-leave-agent`（實作時開）
-- **狀態**：TODO（架構已過 Codex review 兩輪：第 1 輪全數採納修正，第 2 輪僅剩流程圖缺失敗分支，已補）
+- **狀態**：IN PROGRESS（架構已過 Codex review 兩輪；子項 2 時間規則、子項 3 服務層已實作）
 
 ## 目標
 
@@ -19,12 +19,12 @@
 
 **Server／服務層**
 - [ ] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
-- [ ] 時間規則照 README：嚴格格式、合法邊界不裁切、半開區間、只計平日、同年度
-- [ ] 重疊判斷用半開區間、不分假別；相鄰不算重疊
-- [ ] 每個連線 `isolation_level=None` ＋ `PRAGMA foreign_keys = ON`
-- [ ] `apply_leave` 在 `BEGIN IMMEDIATE` 交易內重新驗證、重疊檢查、條件式扣抵、寫假單、寫稽核；任何失敗完整回滾
-- [ ] 鎖定回 `DB_BUSY`、未預期例外回 `INTERNAL_ERROR`，不外洩原始 exception
-- [ ] 無額度資料在 preview 與 apply 都回 `INSUFFICIENT_BALANCE`
+- [x] 時間規則照 README：嚴格格式、合法邊界不裁切、半開區間、只計平日、同年度
+- [x] 重疊判斷用半開區間、不分假別；相鄰不算重疊
+- [x] 每個連線 `isolation_level=None` ＋ `PRAGMA foreign_keys = ON`
+- [x] `apply_leave` 在 `BEGIN IMMEDIATE` 交易內重新驗證、重疊檢查、條件式扣抵、寫假單、寫稽核；任何失敗完整回滾
+- [x] 鎖定回 `DB_BUSY`、未預期例外回 `INTERNAL_ERROR`，不外洩原始 exception
+- [x] 無額度資料在 preview 與 apply 都回 `INSUFFICIENT_BALANCE`
 
 **Client**
 - [ ] 給 LLM 的 schema：`employee_id` 同時不在 `properties` 與 `required`；`preview_leave` 不給 LLM
@@ -48,6 +48,7 @@
 ## 異動檔案
 
 - `src/hrms-leave-agent/README.md`、`init_db.sql`、`requirements.txt`、`.env.example`、`.gitignore`（設計與骨架）
+- `src/hrms-leave-agent/leave_service.py`、`pytest.ini`、`tests/conftest.py`、`tests/test_time_rules.py`、`tests/test_leave_service.py`（子項 2、3）
 
 ## 交接事項
 
