@@ -132,6 +132,9 @@ Client 讀結果的順序：**先看 `isError`** → 是的話轉成統一的錯
 | `DB_BUSY` | 拿不到寫入鎖（`database is locked`） |
 | `INTERNAL_ERROR` | 其他未預期例外；不把原始 exception 內容回給 LLM |
 | `USER_REJECTED` | 使用者在 HITL 按 N（Client 產生，不經 Server） |
+| `INVALID_ARGUMENTS` | LLM 給的工具參數不是 JSON 物件（Client 產生，不呼叫 Server） |
+| `TOOL_CALL_ERROR` | 第 1 層 MCP／SDK 錯誤（`isError: true`），`message` 帶 SDK 文字、最多 500 字，讓 LLM 有機會修正參數（Client 產生） |
+| `INVALID_TOOL_RESULT` | `isError: false` 但內容不是含布林 `ok` 的 JSON 物件（Client 產生） |
 
 ## 時間與時數規則
 
@@ -248,14 +251,14 @@ hrms-leave-agent/
 ├── pytest.ini             ✅ pythonpath＝專案目錄，從工作區根目錄或專案內都能跑
 ├── leave_service.py       ✅ 時間規則、驗證、餘額、重疊、寫入交易
 ├── mcp_server.py          ✅ 3 個工具（FastMCP v1，薄包裝轉 JSON）
-├── agent_app.py           待做：對話迴圈＋schema 轉換＋HITL
+├── agent_app.py           🚧 schema 轉換、employee_id 覆蓋、風險分級、結果解析 ✅；HITL、對話迴圈待做
 └── tests/
     ├── conftest.py        ✅ 每個測試建一個暫存 DB
     ├── test_time_rules.py ✅ 50 個案例
     ├── test_leave_service.py ✅ 48 個案例（查詢、試算、交易、重疊、回滾、清理失敗、DB_BUSY、併發）
     ├── test_mcp_server.py ✅ 工具 JSON 格式、錯誤轉換、schema
     ├── test_mcp_channel.py ✅ stdio 子行程：握手 → list_tools → call_tool（測試策略第 2 層）
-    └── test_client_hook.py  schema 轉換、employee_id 覆蓋、HITL 綁定（mock Server，不連 LLM）
+    └── test_client_hook.py  🚧 schema 轉換、覆蓋、風險分級、結果解析、接真 Server ✅；HITL 綁定待做（不連 LLM）
 ```
 
 ## 測試策略
