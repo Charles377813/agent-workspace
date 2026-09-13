@@ -1,0 +1,275 @@
+# hrms-leave-agent
+
+一句話請假：用自然語言對話完成請假程序，取代「到 HR 平台網頁登記」。
+
+> 狀態：**架構已定（Codex review 第 1 輪修正後）、尚未實作**，目前只有資料表。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
+
+## 範圍（MVP）
+
+**做**：一句話請假（例：「下週三下午請特休」）→ LLM 抽出假別與起訖時間 → Client 攔下並請 Server 試算時數與餘額 → 顯示確認內容（y/N）→ 寫入 SQLite ＋ `audit_logs`；另可問「我特休還剩多少」。
+
+**不做**：主管簽核流、串接真實 HR 系統、登入認證、前端網頁、多輪修改或取消假單、國定假日行事曆、跨年度請假、server-side elicitation、ORM
+
+## 設計原則
+
+1. **LLM 只負責「聽懂」，不負責「算」與「決定能不能請」**。時數、餘額、重疊檢查全部由 Server 端 deterministic 程式碼做（LLM Lesson 4「軟性 vs 硬性約束」：需要確定性的事不交給模型）。
+2. **LLM 不能決定「幫誰請假」**。`employee_id` 不出現在給 LLM 的 schema，由 Client 依啟動參數**無條件覆蓋**，避免「幫王大衛請 10 天特休」這種越權。
+3. **使用者確認的內容＝實際送出的參數**。Client 攔下 `apply_leave` 後凍結參數、自己用同一份參數試算、顯示給人看，按 y 才用**同一份**參數送出；中間不讓 LLM 重新產生參數。
+4. **HITL 只保證「經過官方 `agent_app.py` 的寫入」**。Server 端的餘額與參數檢查是資料正確性防線，不能證明使用者同意，也不能取代授權（見「已知限制」）。
+5. **沿用 Lesson 5 的形狀**：MCP Python SDK **v1**（`FastMCP` ＋ `ClientSession`／`stdio_client`）＋ OpenAI function calling，只換工具與資料表。
+
+## 架構總覽
+
+```mermaid
+flowchart LR
+    U[使用者<br/>終端機輸入] --> A
+
+    subgraph Client["agent_app.py（Host / MCP Client）"]
+        A[對話迴圈<br/>OpenAI function calling] --> H{Pre-execution Hook<br/>查風險表}
+        H -->|LOW| C[session.call_tool]
+        H -->|HIGH: apply_leave| F[凍結參數<br/>覆蓋 employee_id]
+        F --> P[Client 自行呼叫<br/>preview_leave]
+        P -->|試算失敗| E[直接回錯誤給 LLM<br/>不詢問使用者]
+        P -->|試算成功| Q[顯示確認內容<br/>等 y/N]
+        Q -->|y：同一份參數| C
+        Q -->|N| R[回 USER_REJECTED<br/>給 LLM]
+    end
+
+    C -->|stdio / JSON-RPC| S
+    P -->|stdio / JSON-RPC| S
+
+    subgraph Server["mcp_server.py（MCP Server）"]
+        S[3 個 @mcp.tool<br/>薄包裝] --> L[leave_service.py<br/>計算／驗證／交易]
+    end
+
+    L --> D[(leave.db<br/>SQLite)]
+```
+
+### 元件職責
+
+| 元件 | 做什麼 | 不做什麼 |
+|---|---|---|
+| `agent_app.py` | 啟動 Server 子行程、握手、`list_tools()` 轉成 OpenAI tools schema（移除 `employee_id`、隱藏 `preview_leave`）、對話迴圈、HITL、覆蓋 `employee_id` | 不碰資料庫、不算時數 |
+| `mcp_server.py` | 用 `@mcp.tool()` 宣告工具、轉呼叫 `leave_service`、把結果轉成 JSON 字串 | 不寫業務邏輯（方便測試） |
+| `leave_service.py` | 時間解析、時數計算、驗證、餘額查詢、重疊檢查、寫入交易 | 不知道 MCP 與 LLM 的存在 |
+| `leave.db` | 資料 | — |
+
+## 請假流程（一次成功請假）
+
+```mermaid
+sequenceDiagram
+    actor U as 使用者
+    participant A as agent_app（Client）
+    participant M as LLM
+    participant S as mcp_server
+    participant DB as leave.db
+
+    U->>A: 下週三下午請特休
+    A->>M: system prompt（含今天日期與星期）＋使用者訊息＋tools
+    M-->>A: tool_call apply_leave(ANNUAL, 2026-09-16T14:00, 2026-09-16T18:00)
+    Note over A: HIGH → 凍結參數、覆蓋 employee_id=E001
+    A->>S: call_tool preview_leave（同一份參數）
+    S->>DB: 唯讀：驗證、算時數、查餘額、查重疊
+    S-->>A: {ok, hours: 4, remaining_before: 56, remaining_after: 52}
+    A-->>U: 顯示：E001 特休 9/16 14:00–18:00，4 小時，扣後剩 52 小時（y/N）
+    U->>A: y
+    A->>S: call_tool apply_leave（同一份參數）
+    S->>DB: BEGIN IMMEDIATE → 重新驗證與計算、查重疊、條件式扣抵、寫假單、寫稽核 → COMMIT
+    S-->>A: {ok, request_id: 1, hours: 4, remaining_hours: 52}
+    A->>M: tool 結果
+    M-->>A: 已送出：9/16 下午特休 4 小時，剩 52 小時
+    A-->>U: 顯示回覆
+```
+
+其他路徑：
+
+- **試算失敗**（餘額不足、時間不合法…）：Client 不詢問使用者，直接把 preview 的錯誤當成 `apply_leave` 的 tool 結果回給 LLM，讓它向使用者說明。
+- **使用者按 N**：不呼叫 `apply_leave`，回 `{"ok": false, "error_code": "USER_REJECTED"}` 給 LLM，讓它回覆「已取消」。
+- **preview 與 apply 之間狀態改變**（例如另一個請求先扣了額度）：`apply_leave` 在交易內重算，照樣回對應錯誤碼。
+
+## 工具規格
+
+所有工具回傳 **JSON 字串**：成功 `{"ok": true, ...}`，失敗 `{"ok": false, "error_code": "...", "message": "..."}`。
+
+| 工具 | 風險 | LLM 可見 | 參數（不含 `employee_id`） | 回傳重點 |
+|---|---|---|---|---|
+| `query_leave_balance` | LOW | 是 | `leave_type`（選填＝全部）、`year`（選填＝今年） | `[{leave_type, total_hours, used_hours, remaining_hours}]` |
+| `preview_leave` | LOW（唯讀） | **否**，只給 Client 的 hook 呼叫 | `leave_type`、`start_at`、`end_at`、`reason`（選填） | `hours`、`remaining_before`、`remaining_after` |
+| `apply_leave` | **HIGH**（寫入） | 是 | 同 `preview_leave` | `request_id`、`hours`、`remaining_hours` |
+
+- 三個工具在 Server 端都**有** `employee_id` 參數（必填）。
+- 假別代碼 `ANNUAL`／`PERSONAL`／`SICK` 以 JSON Schema `enum` 寫進 `leave_type`，所以不需要另一個「列出假別」工具。
+
+### Client 端 schema 轉換與注入（`agent_app.py`）
+
+1. `list_tools()` 取回工具後，**深複製** `inputSchema`，把 `employee_id` 同時從 `properties` 和 `required` 移除；`preview_leave` 整個不交給 LLM。
+2. 收到 LLM 的 tool_call 後，**無條件**執行 `args["employee_id"] = 啟動身分`（LLM 就算自己塞了 `employee_id` 也會被覆蓋）。
+3. 風險表 `TOOL_RISK_TABLE`：`query_leave_balance`＝LOW、`apply_leave`＝HIGH；**不在表內的工具一律 HIGH**（同 `lesson5-4.py` 預設 CRITICAL）。
+
+### 錯誤碼
+
+| error_code | 情境 |
+|---|---|
+| `EMPLOYEE_NOT_FOUND` | 員工不存在 |
+| `LEAVE_TYPE_NOT_FOUND` | 假別不存在 |
+| `INVALID_TIME_FORMAT` | 不符 `YYYY-MM-DDTHH:MM`（含秒數、時區、純日期都拒絕） |
+| `INVALID_TIME_RANGE` | 起訖不是合法工作邊界、落在週末、結束不晚於開始、合計 0 小時 |
+| `CROSS_YEAR_NOT_SUPPORTED` | 起訖不同年 |
+| `INSUFFICIENT_BALANCE` | 餘額不足，**或該員工該假別該年度沒有額度資料**（MVP 視為同一種） |
+| `OVERLAPPING_REQUEST` | 與既有假單時間重疊 |
+| `DB_BUSY` | 拿不到寫入鎖（`database is locked`） |
+| `INTERNAL_ERROR` | 其他未預期例外；不把原始 exception 內容回給 LLM |
+| `USER_REJECTED` | 使用者在 HITL 按 N（Client 產生，不經 Server） |
+
+## 時間與時數規則
+
+由 `leave_service` 的純函式負責，可單元測試：
+
+- **格式**：嚴格比對 `^\d{4}-\d{2}-\d{2}T\d{2}:00$`，再 `datetime.strptime(..., "%Y-%m-%dT%H:%M")`。不直接用 `fromisoformat()`（它會接受秒數與時區）。時區固定 `Asia/Taipei`，不存時區資訊。
+- **工作時段**（半開區間）：上午 `[09:00, 13:00)`、下午 `[14:00, 18:00)`，一天 8 小時，只有週一到週五。
+- **不裁切**：起訖本身必須是平日的合法邊界，否則 `INVALID_TIME_RANGE`。
+  - 合法開始時刻：09、10、11、12、14、15、16、17 點
+  - 合法結束時刻：10、11、12、13、15、16、17、18 點
+- **計算**：請假區間 `[start, end)` 與每個平日的兩個工作時段取交集後加總；`end > start` 且合計 > 0。
+- **國定假日不扣除**（MVP 限制）；起訖必須同一年。
+- **LLM 慣用說法對照**（寫進 system prompt）：「上午」＝09:00–13:00、「下午」＝14:00–18:00、「一天／整天」＝09:00–18:00。
+
+| 請求 | 結果 |
+|---|---|
+| 週三 14:00–18:00 | 4 小時 |
+| 週三 09:00–18:00 | 8 小時（午休不計） |
+| 週三 12:00–15:00 | 2 小時（12–13、14–15） |
+| 週三 13:00–15:00 | `INVALID_TIME_RANGE`（13 點不是合法開始） |
+| 週三 08:00–18:00 | `INVALID_TIME_RANGE`（不裁切） |
+| 週五 17:00 – 週一 10:00 | 2 小時（週末不計） |
+| 週六 09:00 – 週一 18:00 | `INVALID_TIME_RANGE`（起點在週末） |
+| 週三 14:30–18:00 | `INVALID_TIME_FORMAT`（非整點） |
+
+## 資料庫存取與交易
+
+### 連線規則
+
+- 每次操作建立**短生命週期** connection，用完關閉。
+- `sqlite3.connect(db_path, isolation_level=None, timeout=5)`：關掉 Python `sqlite3` 的隱式交易，由程式明確下 `BEGIN`（預設模式下若先前有 DML，`BEGIN IMMEDIATE` 會拋 `cannot start a transaction within a transaction`，已實測）。
+- 每個 connection 建立後立刻 `PRAGMA foreign_keys = ON`（SQLite 預設不啟用外鍵）。
+- 所有 SQL 一律參數綁定。
+
+### 重疊判斷（半開區間，不分假別）
+
+```sql
+SELECT 1 FROM leave_requests
+ WHERE employee_id = :emp
+   AND status = 'SUBMITTED'
+   AND start_at < :new_end
+   AND end_at   > :new_start
+```
+
+時間字串固定 `YYYY-MM-DDTHH:MM`，字典序即時間序，可以直接比較。相鄰假單（前一張結束＝後一張開始）不算重疊。
+
+### `apply_leave` 交易
+
+```
+conn = connect(isolation_level=None); PRAGMA foreign_keys = ON
+try:
+  BEGIN IMMEDIATE                                  -- 先拿寫入鎖，重疊檢查與扣抵都在鎖內
+  驗證員工、假別；解析時間、compute_hours()
+  重疊檢查 → 有就 ROLLBACK，回 OVERLAPPING_REQUEST
+  UPDATE leave_balances
+     SET used_hours = used_hours + :hours
+   WHERE employee_id = :emp AND leave_type = :type AND year = :year
+     AND total_hours - used_hours >= :hours      -- 條件式扣抵
+  rowcount = 0 → ROLLBACK，回 INSUFFICIENT_BALANCE（含無額度資料）
+  INSERT leave_requests
+  INSERT audit_logs ('APPLY_LEAVE', 員工／假別／起訖／時數)
+  COMMIT
+except database is locked → 若 in_transaction 則 ROLLBACK，回 DB_BUSY
+except 其他例外           → 若 in_transaction 則 ROLLBACK，回 INTERNAL_ERROR
+finally: conn.close()
+```
+
+`preview_leave` 走同一套驗證、計算、重疊與餘額查詢，但只讀、不開寫入交易；「無額度資料」同樣回 `INSUFFICIENT_BALANCE`，確保與 apply 一致。表上的 `CHECK (used_hours <= total_hours)` 是最後一道保險。
+
+## Agent 對話迴圈（`agent_app.py`）
+
+- 啟動：`python agent_app.py --employee E001 [--today 2026-09-13]`
+  - `--today` 預設為系統日期；測試時固定日期，讓「下週三」的結果可重現。
+- system prompt：今天日期與星期（程式產生）、時段對照表、「資訊不足（沒說假別或日期）就反問，不要猜」。
+- 迴圈上限 `MAX_TURNS = 6`（每次 LLM 回應算一輪），跑滿就結束並提示使用者重講。
+- 一次處理一張假單；輸入 `exit` 離開。
+- tool 結果一律當成資料回給 LLM，不當指令。
+
+## 設定
+
+`.env`（由 `.env.example` 複製）：
+
+| 變數 | 用途 | 預設 |
+|---|---|---|
+| `OPENAI_API_KEY` | LLM API key | 必填 |
+| `OPENAI_MODEL` | 模型名稱 | `gpt-4o` |
+| `HRMS_DB_PATH` | SQLite 檔案位置（測試時指向暫存檔） | `leave.db` |
+
+套件版本：`mcp` **固定在 v1**（`>=1.28,<2`）。`pip install mcp` 不加版本會裝到 2.x，v2 把 `FastMCP` 改名 `MCPServer` 並改了 Client API，Lesson 5 的寫法會直接 import 失敗。
+
+## 資料表
+
+見 [init_db.sql](init_db.sql)。整份腳本包在一個交易裡，重跑會**完整重置**所有資料（含 `audit_logs`）：
+
+| 表 | 內容 |
+|---|---|
+| `employees` | 員工 |
+| `leave_types` | 假別：`ANNUAL` 特休、`PERSONAL` 事假、`SICK` 病假 |
+| `leave_balances` | 員工 × 假別 × 年度的 `total_hours`／`used_hours` |
+| `leave_requests` | 請假紀錄，`status` 目前只有 `SUBMITTED` |
+| `audit_logs` | 寫入稽核 |
+
+種子資料刻意安排：**E002 的特休已用完**（測餘額不足），E001 各假別都有餘額（測成功路徑）。
+
+## 檔案結構
+
+```
+hrms-leave-agent/
+├── README.md
+├── init_db.sql            ✅ 建表＋種子資料
+├── requirements.txt       ✅
+├── .env.example           ✅
+├── .gitignore             ✅ 排除 leave.db、.env
+├── leave_service.py       待做：時間／計算／驗證／交易
+├── mcp_server.py          待做：3 個工具
+├── agent_app.py           待做：對話迴圈＋schema 轉換＋HITL
+└── tests/
+    ├── conftest.py        待做：每個測試建一個暫存 DB
+    ├── test_time_rules.py
+    ├── test_leave_service.py
+    └── test_client_hook.py  schema 轉換、employee_id 覆蓋、HITL 綁定（mock Server，不連 LLM）
+```
+
+## 測試策略
+
+沿用 Lesson 5 三層測試，由下往上：
+
+| 層 | 測什麼 | 連 LLM | 花費 |
+|---|---|---|---|
+| 1. 服務層＋Client hook | 時間規則、各錯誤碼、交易成功與回滾、schema 轉換、參數綁定 | 否 | 無 |
+| 2. MCP 通道 | 腳本啟動 Server、`list_tools()` 確認 3 個工具、呼叫 `preview_leave` | 否 | 無 |
+| 3. 完整流程 | 固定 `--today` 手動跑：成功請假／按 N 取消／E002 餘額不足 | 是 | 少量 |
+
+```bash
+pytest src/hrms-leave-agent/tests
+```
+
+## 已知限制
+
+- **沒有登入**：`--employee` 參數就是身分，誰拿到終端機都能以任何員工請假。真實系統要由認證取得身分，Server 端再做授權。
+- **HITL 只在官方 Client**：若有人用其他 MCP Client 直接連這個 Server，`apply_leave` 不會被攔截，也不受 `employee_id` 覆蓋保護。Server 端的檢查只保證資料正確，不保證使用者同意。
+- 不處理國定假日、彈性工時、跨年度、取消假單、主管簽核。
+- 使用者輸入（含 `reason`）本來就會送進 LLM；安全邊界靠的是 `employee_id` 覆蓋、寫入必經風險表、確認畫面與實際參數綁定、SQL 參數綁定，而不是信任 LLM 的輸出。
+
+## 初始化
+
+```bash
+cd src/hrms-leave-agent
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
+python -c "import sqlite3; c=sqlite3.connect('leave.db'); c.executescript(open('init_db.sql', encoding='utf-8').read()); c.close()"
+cp .env.example .env   # 填入 API key
+```
