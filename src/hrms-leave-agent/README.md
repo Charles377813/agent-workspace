@@ -233,12 +233,13 @@ hrms-leave-agent/
 ├── requirements.txt       ✅
 ├── .env.example           ✅
 ├── .gitignore             ✅ 排除 leave.db、.env
-├── leave_service.py       待做：時間／計算／驗證／交易
+├── pytest.ini             ✅ pythonpath＝專案目錄，從工作區根目錄或專案內都能跑
+├── leave_service.py       🚧 時間規則與時數計算 ✅；驗證／餘額／重疊／交易待做
 ├── mcp_server.py          待做：3 個工具
 ├── agent_app.py           待做：對話迴圈＋schema 轉換＋HITL
 └── tests/
     ├── conftest.py        待做：每個測試建一個暫存 DB
-    ├── test_time_rules.py
+    ├── test_time_rules.py ✅ 50 個案例
     ├── test_leave_service.py
     └── test_client_hook.py  schema 轉換、employee_id 覆蓋、HITL 綁定（mock Server，不連 LLM）
 ```
