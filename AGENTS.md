@@ -11,7 +11,7 @@ Codex 在這個工作區的入口。**先讀這兩份**，這裡只列 Codex 專
 
 <!-- skill-list:start — 新增／刪除 skill 時必須同步更新這份清單（skill-creation-sop.md §3、§6） -->
 
-（目前無工作區 skill）
+- `independent-review` — 獨立審查程式、文件或變更，回報有證據的問題而不直接修改。
 
 <!-- skill-list:end -->
 
