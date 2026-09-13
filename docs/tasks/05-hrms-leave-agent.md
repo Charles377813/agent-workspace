@@ -18,7 +18,7 @@
 - [ ] `requirements.txt` 固定 `mcp>=1.28,<2`，照 README 初始化步驟可跑起來
 
 **Server／服務層**
-- [ ] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
+- [x] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
 - [x] 時間規則照 README：嚴格格式、合法邊界不裁切、半開區間、只計平日、同年度
 - [x] 重疊判斷用半開區間、不分假別；相鄰不算重疊
 - [x] 每個連線 `isolation_level=None` ＋ `PRAGMA foreign_keys = ON`
@@ -29,6 +29,7 @@
 **Client**
 - [ ] 給 LLM 的 schema：`employee_id` 同時不在 `properties` 與 `required`；`preview_leave` 不給 LLM
 - [ ] 所有 tool_call 無條件以 `--employee` 覆蓋 `employee_id`
+- [ ] 讀工具結果先檢查 `isError`（SDK 參數驗證錯誤，文字不是 JSON），不是才解析 JSON 看 `ok`；兩種錯誤都轉成可交給 LLM 的結果（README「兩層錯誤契約」）
 - [ ] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
 - [ ] `--today` 可固定日期
 - [ ] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
@@ -41,7 +42,7 @@
 - **服務層**：成功請假三表變化正確；餘額剛好等於時數可成功；餘額不足；無額度資料；員工／假別不存在；重疊與剛好相鄰
 - **回滾**：讓 `audit_logs` 寫入失敗（例如 monkeypatch 或 trigger），確認 `leave_balances` 與 `leave_requests` 都沒變
 - **併發**：另一條連線持有寫入鎖時，`apply_leave` 回 `DB_BUSY` 且資料不變
-- **Client hook**（mock Server，不連 LLM）：schema 轉換結果；LLM 帶假 `employee_id` 被覆蓋；確認畫面資料來自 apply 的實際參數；按 N 後三表不變
+- **Client hook**（mock Server，不連 LLM）：schema 轉換結果；LLM 帶假 `employee_id` 被覆蓋；確認畫面資料來自 apply 的實際參數；按 N 後三表不變；`isError` 與 `ok:false` 兩種錯誤各一
 
 手動（連 LLM，固定 `--today 2026-09-13`）：成功請假、按 N 取消、E002 特休餘額不足。
 
@@ -49,6 +50,7 @@
 
 - `src/hrms-leave-agent/README.md`、`init_db.sql`、`requirements.txt`、`.env.example`、`.gitignore`（設計與骨架）
 - `src/hrms-leave-agent/leave_service.py`、`pytest.ini`、`tests/conftest.py`、`tests/test_time_rules.py`、`tests/test_leave_service.py`（子項 2、3）
+- `src/hrms-leave-agent/mcp_server.py`、`tests/test_mcp_server.py`、`tests/test_mcp_channel.py`（子項 4）
 
 ## 交接事項
 

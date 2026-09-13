@@ -91,9 +91,21 @@ sequenceDiagram
 
 所有工具回傳 **JSON 字串**：成功 `{"ok": true, ...}`，失敗 `{"ok": false, "error_code": "...", "message": "..."}`。
 
+### 兩層錯誤契約（Client 必須依序處理）
+
+| 層 | 何時發生 | `CallToolResult.isError` | `content[0].text` |
+|---|---|---|---|
+| 1. MCP／SDK 錯誤 | 工具函式執行**前**的參數驗證失敗：假別不在 enum、缺必填欄位、型別錯誤、工具不存在 | `true` | SDK 的錯誤文字，**不是 JSON** |
+| 2. 業務錯誤 | 工具函式內的 `LeaveError`，以及被 `_respond` 攔下的非預期例外（`INTERNAL_ERROR`） | `false` | JSON，`ok: false` |
+
+Client 讀結果的順序：**先看 `isError`** → 是的話轉成統一的錯誤結果交給 LLM（不要 `json.loads`）→ 不是才解析 `content[0].text` 的 JSON，再看 `ok`。
+
+- mcp 1.30 對 `-> str` 的工具會自動附 `outputSchema: {"result": string}` 與 `structuredContent`，但原始字串同時保留在唯一的 `TextContent`；本專案一律讀 `content[0].text`，不讀 `structuredContent`。
+- 非預期例外的完整 traceback 只寫進 Server 的 stderr log，回給 Client 的只有固定訊息。
+
 | 工具 | 風險 | LLM 可見 | 參數（不含 `employee_id`） | 回傳重點 |
 |---|---|---|---|---|
-| `query_leave_balance` | LOW | 是 | `leave_type`（選填＝全部）、`year`（選填＝今年） | `[{leave_type, total_hours, used_hours, remaining_hours}]` |
+| `query_leave_balance` | LOW | 是 | `leave_type`（選填＝全部）、`year`（選填＝Server 系統日期的今年，不受 `--today` 影響） | `balances: [{leave_type, total_hours, used_hours, remaining_hours}]`；該年度無資料＝空陣列 |
 | `preview_leave` | LOW（唯讀） | **否**，只給 Client 的 hook 呼叫 | `leave_type`、`start_at`、`end_at`、`reason`（選填） | `hours`、`remaining_before`、`remaining_after` |
 | `apply_leave` | **HIGH**（寫入） | 是 | 同 `preview_leave` | `request_id`、`hours`、`remaining_hours` |
 
@@ -235,12 +247,14 @@ hrms-leave-agent/
 ├── .gitignore             ✅ 排除 leave.db、.env
 ├── pytest.ini             ✅ pythonpath＝專案目錄，從工作區根目錄或專案內都能跑
 ├── leave_service.py       ✅ 時間規則、驗證、餘額、重疊、寫入交易
-├── mcp_server.py          待做：3 個工具
+├── mcp_server.py          ✅ 3 個工具（FastMCP v1，薄包裝轉 JSON）
 ├── agent_app.py           待做：對話迴圈＋schema 轉換＋HITL
 └── tests/
     ├── conftest.py        ✅ 每個測試建一個暫存 DB
     ├── test_time_rules.py ✅ 50 個案例
     ├── test_leave_service.py ✅ 48 個案例（查詢、試算、交易、重疊、回滾、清理失敗、DB_BUSY、併發）
+    ├── test_mcp_server.py ✅ 工具 JSON 格式、錯誤轉換、schema
+    ├── test_mcp_channel.py ✅ stdio 子行程：握手 → list_tools → call_tool（測試策略第 2 層）
     └── test_client_hook.py  schema 轉換、employee_id 覆蓋、HITL 綁定（mock Server，不連 LLM）
 ```
 
