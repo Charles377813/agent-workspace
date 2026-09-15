@@ -13,7 +13,7 @@ from mcp.client.stdio import stdio_client
 
 import agent_app
 import mcp_server
-from agent_app import ClientToolError, parse_tool_result, prepare_arguments, risk_level, to_openai_tools
+from agent_app import ClientToolError, parse_tool_result, prepare_arguments, risk_level, to_anthropic_tools
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
@@ -33,26 +33,26 @@ def real_mcp_tools():
     return [tool.model_copy(deep=True) for tool in asyncio.run(mcp_server.mcp.list_tools())]
 
 
-def test_openai_tools_from_real_server_schema():
-    tools = to_openai_tools(real_mcp_tools())
-    by_name = {tool["function"]["name"]: tool for tool in tools}
+def test_anthropic_tools_from_real_server_schema():
+    tools = to_anthropic_tools(real_mcp_tools())
+    by_name = {tool["name"]: tool for tool in tools}
 
     assert set(by_name) == {"query_leave_balance", "apply_leave"}  # preview_leave 被隱藏
-    assert all(tool["type"] == "function" for tool in tools)
+    assert all(set(tool) == {"name", "description", "input_schema"} for tool in tools)
 
     for tool in tools:
-        parameters = tool["function"]["parameters"]
+        parameters = tool["input_schema"]
         assert "employee_id" not in parameters["properties"]
         assert "employee_id" not in parameters.get("required", [])
         assert "title" not in parameters
-        assert tool["function"]["description"]
+        assert tool["description"]
 
-    apply_parameters = by_name["apply_leave"]["function"]["parameters"]
+    apply_parameters = by_name["apply_leave"]["input_schema"]
     assert set(apply_parameters["required"]) == {"leave_type", "start_at", "end_at"}
     assert apply_parameters["properties"]["leave_type"]["enum"] == ["ANNUAL", "PERSONAL", "SICK"]
 
     # query 移除 employee_id 後沒有必填參數，不留空的 required
-    assert "required" not in by_name["query_leave_balance"]["function"]["parameters"]
+    assert "required" not in by_name["query_leave_balance"]["input_schema"]
 
 
 def test_conversion_does_not_mutate_mcp_schema():
@@ -67,13 +67,13 @@ def test_conversion_does_not_mutate_mcp_schema():
     # 前提：來源確實含有要被移除的欄位，否則這個測試驗不到任何東西
     assert "employee_id" in before["properties"] and "employee_id" in before["required"]
 
-    to_openai_tools([tool])
+    to_anthropic_tools([tool])
 
     assert tool.inputSchema == before
 
 
 def test_conversion_does_not_mutate_server_registry():
-    to_openai_tools(asyncio.run(mcp_server.mcp.list_tools()))
+    to_anthropic_tools(asyncio.run(mcp_server.mcp.list_tools()))
     fresh = {tool.name: tool for tool in asyncio.run(mcp_server.mcp.list_tools())}
     assert "employee_id" in fresh["apply_leave"].inputSchema["properties"]
     assert "employee_id" in fresh["apply_leave"].inputSchema["required"]
@@ -95,9 +95,9 @@ def test_conversion_does_not_mutate_server_registry():
 )
 def test_conversion_handles_schema_shapes(input_schema, expected):
     tool = types.Tool(name="other_tool", description=None, inputSchema=input_schema)
-    [converted] = to_openai_tools([tool])
-    assert converted["function"]["parameters"] == expected
-    assert converted["function"]["description"] == ""
+    [converted] = to_anthropic_tools([tool])
+    assert converted["input_schema"] == expected
+    assert converted["description"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ async def run_client_flow(db_path):
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            openai_tools = to_openai_tools((await session.list_tools()).tools)
+            anthropic_tools = to_anthropic_tools((await session.list_tools()).tools)
 
             # LLM 想查 E002 的特休（E002 已用完），Client 以啟動身分 E001 覆蓋
             spoofed = prepare_arguments('{"employee_id": "E002", "leave_type": "ANNUAL", "year": 2026}', "E001")
@@ -246,13 +246,13 @@ async def run_client_flow(db_path):
                     ),
                 )
             )
-            return openai_tools, balance, invalid_enum, insufficient
+            return anthropic_tools, balance, invalid_enum, insufficient
 
 
 def test_client_helpers_against_real_stdio_server(db_path, db):
-    openai_tools, balance, invalid_enum, insufficient = asyncio.run(run_client_flow(db_path))
+    anthropic_tools, balance, invalid_enum, insufficient = asyncio.run(run_client_flow(db_path))
 
-    assert {tool["function"]["name"] for tool in openai_tools} == {"query_leave_balance", "apply_leave"}
+    assert {tool["name"] for tool in anthropic_tools} == {"query_leave_balance", "apply_leave"}
 
     assert balance["ok"] is True
     assert balance["balances"] == [

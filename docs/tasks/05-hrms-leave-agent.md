@@ -32,7 +32,8 @@
 - [x] 讀工具結果先檢查 `isError`（SDK 參數驗證錯誤，文字不是 JSON），不是才解析 JSON 看 `ok`；兩種錯誤都轉成可交給 LLM 的結果（README「兩層錯誤契約」）
 - [x] LLM 的 tool_call 只接受實際交給 LLM 的工具名，其餘回 `UNKNOWN_TOOL`、不詢問不呼叫
 - [x] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
-- [ ] `--today` 可固定日期
+- [x] `--today` 可固定日期
+- [x] 對話迴圈用 Claude Messages API 手動 tool use 迴圈：同一則回應的 `tool_result` 放同一則 user 訊息、`ok:false` 標 `is_error`、`refusal` 不放回歷史、`MAX_TURNS` 上限；Server 子行程不帶 `ANTHROPIC_*`
 - [ ] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
 
 ## 驗證方式
@@ -54,6 +55,7 @@
 - `src/hrms-leave-agent/mcp_server.py`、`tests/test_mcp_server.py`、`tests/test_mcp_channel.py`（子項 4）
 - `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hook.py`（子項 5）
 - `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hitl.py`（子項 6）
+- `src/hrms-leave-agent/agent_app.py`、`tests/test_agent_loop.py`、`requirements.txt`、`.env.example`，以及舊測試改用 `to_anthropic_tools`（子項 7）
 
 ## 交接事項
 
@@ -63,4 +65,6 @@
 - 程式骨架參考 `C:\dev\ai-agent\mcp_server.py`、`mcp_client.py`（MCP SDK v1 寫法）；HITL 參考 `lesson5-4.py`（`mcp_client.py` 本身沒實作攔截）。
 - Codex review 第 1 輪（2026-09-13）8 項＋驗收缺口全部採納，決策摘要見 `docs/decisions.md`。
 - 子項 6、7 寫 dispatch 時（子項 5 Codex review 提醒）：LLM 發出的 tool_call 只接受「實際給 LLM 的工具名」allowlist，不在內就直接回錯誤給 LLM、不詢問使用者；`preview_leave` 只允許 Client 內部 hook 呼叫。
-- 不做（子項 5 Codex review 判斷）：OpenAI `strict: true`、通用 JSON Schema 正規化、多 `TextContent` 聚合。
+- 不做（子項 5 Codex review 判斷）：tool 定義的 `strict: true`、通用 JSON Schema 正規化、多 `TextContent` 聚合。
+- 2026-09-15 LLM 由 OpenAI 改為 Anthropic（使用者要求）：模型 `claude-opus-5`、`fallbacks="default"`，手動驗收需要使用者自行在 `.env` 填 `ANTHROPIC_API_KEY`（或 `ant auth login`）。
+- 子項 7 Codex review 4 項全採納：拒答以固定回覆收尾回合（不再與下一句合併重送）；`pause_turn`／`compaction` 直接續呼叫、`model_context_window_exceeded` 清空歷史；400／404 與找不到認證（SDK 丟 `TypeError`）改為結束對話。`chat()` 的 except 本身沒有自動測試（需真 API），分類邏輯抽成 `describe_api_error` 測。

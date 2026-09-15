@@ -313,7 +313,7 @@ async def run_real(db_path, name, arguments, confirm, employee_id="E001"):
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            allowed = {tool["function"]["name"] for tool in agent_app.to_openai_tools((await session.list_tools()).tools)}
+            allowed = {tool["name"] for tool in agent_app.to_anthropic_tools((await session.list_tools()).tools)}
             return await dispatch_tool_call(
                 session,
                 name,

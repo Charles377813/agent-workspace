@@ -1,4 +1,4 @@
 mcp>=1.28,<2
-openai
+anthropic>=1.5,<2
 python-dotenv
 pytest
