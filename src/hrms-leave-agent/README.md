@@ -2,7 +2,81 @@
 
 一句話請假：用自然語言對話完成請假程序，取代「到 HR 平台網頁登記」。
 
-> 狀態：**服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作**；待真實 Claude API 手動驗收。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
+> 狀態：**MVP 完成**——服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作，248 個自動測試通過，2026-09-15 以真實 Claude API 手動驗收三情境通過。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
+
+## Demo
+
+以下是真實 Claude API（`claude-opus-5`）的手動驗收紀錄，固定 `--today 2026-09-13`（週日），所以「下週三」＝ 2026-09-16。初始資料：E001 特休 80 小時已用 24（剩 56），E002 特休已用完。
+
+### 1. 確認時按 N：什麼都不寫入
+
+```text
+HRMS 請假助理（員工 E001，今天 2026-09-13，模型 claude-opus-5）。輸入 exit 離開。
+
+你：下週三下午請特休
+📝 請確認假單內容
+  員工：E001
+  假別：特休（ANNUAL）
+  時間：2026-09-16T14:00 ～ 2026-09-16T18:00
+  時數：4 小時
+  餘額：56 → 52 小時
+👉 確認送出？(y/N): N
+
+助理：已取消，假單沒有送出。需要調整日期或假別的話再告訴我。
+```
+
+資料庫：無變動。
+
+### 2. 確認時按 y：寫入假單、扣餘額、留稽核
+
+```text
+你：下週三下午請特休
+📝 請確認假單內容
+  員工：E001
+  假別：特休（ANNUAL）
+  時間：2026-09-16T14:00 ～ 2026-09-16T18:00
+  時數：4 小時
+  餘額：56 → 52 小時
+👉 確認送出？(y/N): y
+
+助理：已送出 ✅
+
+- 假別：特休
+- 時間：2026-09-16（三）14:00–18:00，共 4 小時
+- 單號：1
+- 特休剩餘：52 小時（6.5 天）
+```
+
+| 資料表 | 送出前 | 送出後 |
+|---|---|---|
+| `leave_requests` | 0 筆 | #1：E001、ANNUAL、2026-09-16T14:00～18:00、4 小時、`SUBMITTED` |
+| `leave_balances`（E001 特休） | used 24 | used 28 |
+| `audit_logs` | 0 筆 | 1 筆 `APPLY_LEAVE` |
+
+### 3. 餘額不足：不會出現確認畫面
+
+```text
+HRMS 請假助理（員工 E002，今天 2026-09-13，模型 claude-opus-5）。輸入 exit 離開。
+
+你：下週三下午請特休
+
+助理：特休已用完（2026 年剩 0 小時），無法送出這張假單。
+
+目前剩餘：
+- 事假：96 小時
+- 病假：240 小時
+
+要改用事假或病假請 9/16（三）下午嗎？
+```
+
+資料庫：無變動。就算 LLM 呼叫 `apply_leave`，Client 也會先自行 `preview_leave` 試算；餘額不足時直接把 `INSUFFICIENT_BALANCE` 交回 LLM，不詢問使用者（自動測試涵蓋此路徑）。其他假別的餘額是 LLM 另外呼叫 `query_leave_balance` 查到的。
+
+### 從 Demo 看得到的設計重點
+
+- **日期由程式算、不靠 LLM 推**：system prompt 已放本週／下週日期對照，「下週三」穩定落在 9/16。
+- **確認畫面＝實際送出的參數**：畫面上的時間、時數、餘額來自 Client 凍結參數後自行試算，按 y 送出的是同一份參數。
+- **身分不由 LLM 決定**：員工一律是啟動參數 `--employee`，LLM 的工具 schema 裡根本沒有 `employee_id`。
+- **寫入前一定經過人**：`apply_leave` 必經 y/N；試算不過（例如餘額不足）連確認都不問。
 
 ## 範圍（MVP）
 
@@ -314,4 +388,5 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt
 python -c "import sqlite3; c=sqlite3.connect('leave.db'); c.executescript(open('init_db.sql', encoding='utf-8').read()); c.close()"
 cp .env.example .env   # 填入 API key
+.venv/Scripts/python agent_app.py --employee E001 --today 2026-09-13
 ```
