@@ -3,7 +3,7 @@
 - **編號**：#5（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-leave-agent`（實作時開）
-- **狀態**：TODO（架構已過 Codex review 兩輪：第 1 輪全數採納修正，第 2 輪僅剩流程圖缺失敗分支，已補）
+- **狀態**：DONE（子項 1～7 完成、手動驗收三情境通過，2026-09-15 合併 `master`）
 
 ## 目標
 
@@ -15,23 +15,26 @@
 
 **資料與環境**
 - [x] `init_db.sql` 可建出五張表與種子資料，整份在一個交易內、重跑完整重置（含 `audit_logs`）
-- [ ] `requirements.txt` 固定 `mcp>=1.28,<2`，照 README 初始化步驟可跑起來
+- [x] `requirements.txt` 固定 `mcp>=1.28,<2`，照 README 初始化步驟可跑起來
 
 **Server／服務層**
-- [ ] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
-- [ ] 時間規則照 README：嚴格格式、合法邊界不裁切、半開區間、只計平日、同年度
-- [ ] 重疊判斷用半開區間、不分假別；相鄰不算重疊
-- [ ] 每個連線 `isolation_level=None` ＋ `PRAGMA foreign_keys = ON`
-- [ ] `apply_leave` 在 `BEGIN IMMEDIATE` 交易內重新驗證、重疊檢查、條件式扣抵、寫假單、寫稽核；任何失敗完整回滾
-- [ ] 鎖定回 `DB_BUSY`、未預期例外回 `INTERNAL_ERROR`，不外洩原始 exception
-- [ ] 無額度資料在 preview 與 apply 都回 `INSUFFICIENT_BALANCE`
+- [x] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
+- [x] 時間規則照 README：嚴格格式、合法邊界不裁切、半開區間、只計平日、同年度
+- [x] 重疊判斷用半開區間、不分假別；相鄰不算重疊
+- [x] 每個連線 `isolation_level=None` ＋ `PRAGMA foreign_keys = ON`
+- [x] `apply_leave` 在 `BEGIN IMMEDIATE` 交易內重新驗證、重疊檢查、條件式扣抵、寫假單、寫稽核；任何失敗完整回滾
+- [x] 鎖定回 `DB_BUSY`、未預期例外回 `INTERNAL_ERROR`，不外洩原始 exception
+- [x] 無額度資料在 preview 與 apply 都回 `INSUFFICIENT_BALANCE`
 
 **Client**
-- [ ] 給 LLM 的 schema：`employee_id` 同時不在 `properties` 與 `required`；`preview_leave` 不給 LLM
-- [ ] 所有 tool_call 無條件以 `--employee` 覆蓋 `employee_id`
-- [ ] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
-- [ ] `--today` 可固定日期
-- [ ] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
+- [x] 給 LLM 的 schema：`employee_id` 同時不在 `properties` 與 `required`；`preview_leave` 不給 LLM
+- [x] 所有 tool_call 無條件以 `--employee` 覆蓋 `employee_id`（`prepare_arguments`；CLI 參數在子項 7 接上）
+- [x] 讀工具結果先檢查 `isError`（SDK 參數驗證錯誤，文字不是 JSON），不是才解析 JSON 看 `ok`；兩種錯誤都轉成可交給 LLM 的結果（README「兩層錯誤契約」）
+- [x] LLM 的 tool_call 只接受實際交給 LLM 的工具名，其餘回 `UNKNOWN_TOOL`、不詢問不呼叫
+- [x] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
+- [x] `--today` 可固定日期
+- [x] 對話迴圈用 Claude Messages API 手動 tool use 迴圈：同一則回應的 `tool_result` 放同一則 user 訊息、`ok:false` 標 `is_error`、`refusal` 不放回歷史、`MAX_TURNS` 上限；Server 子行程不帶 `ANTHROPIC_*`
+- [x] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
 
 ## 驗證方式
 
@@ -41,13 +44,28 @@
 - **服務層**：成功請假三表變化正確；餘額剛好等於時數可成功；餘額不足；無額度資料；員工／假別不存在；重疊與剛好相鄰
 - **回滾**：讓 `audit_logs` 寫入失敗（例如 monkeypatch 或 trigger），確認 `leave_balances` 與 `leave_requests` 都沒變
 - **併發**：另一條連線持有寫入鎖時，`apply_leave` 回 `DB_BUSY` 且資料不變
-- **Client hook**（mock Server，不連 LLM）：schema 轉換結果；LLM 帶假 `employee_id` 被覆蓋；確認畫面資料來自 apply 的實際參數；按 N 後三表不變
+- **Client hook**（mock Server，不連 LLM）：schema 轉換結果；LLM 帶假 `employee_id` 被覆蓋；確認畫面資料來自 apply 的實際參數；按 N 後三表不變；`isError` 與 `ok:false` 兩種錯誤各一
 
 手動（連 LLM，固定 `--today 2026-09-13`）：成功請假、按 N 取消、E002 特休餘額不足。
+
+**手動驗收結果（2026-09-15，`claude-opus-5`，全數通過）**
+
+| 情境 | 畫面 | 資料庫 |
+|---|---|---|
+| E001 按 N | 確認畫面 9/16 14:00–18:00、4 小時、56→52；回「已取消」 | 無變動 |
+| E001 按 y | 同上確認畫面；回單號 1、剩 52 小時 | `leave_requests` #1 SUBMITTED、特休 used 24→28、`audit_logs` 1 筆 APPLY_LEAVE |
+| E002 特休 | 未出現確認畫面，直接回特休已用完並列出其他假別餘額 | 無變動 |
+
+- 觀察：確認畫面出現前輸入 `y`／`N` 會被當成一般對話（不呼叫工具、不寫入），屬預期行為。
 
 ## 異動檔案
 
 - `src/hrms-leave-agent/README.md`、`init_db.sql`、`requirements.txt`、`.env.example`、`.gitignore`（設計與骨架）
+- `src/hrms-leave-agent/leave_service.py`、`pytest.ini`、`tests/conftest.py`、`tests/test_time_rules.py`、`tests/test_leave_service.py`（子項 2、3）
+- `src/hrms-leave-agent/mcp_server.py`、`tests/test_mcp_server.py`、`tests/test_mcp_channel.py`（子項 4）
+- `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hook.py`（子項 5）
+- `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hitl.py`（子項 6）
+- `src/hrms-leave-agent/agent_app.py`、`tests/test_agent_loop.py`、`requirements.txt`、`.env.example`，以及舊測試改用 `to_anthropic_tools`（子項 7）
 
 ## 交接事項
 
@@ -56,3 +74,7 @@
 - 不要新增：國定假日套件、auth、主管簽核、server-side elicitation、approval token、網頁 UI、ORM。
 - 程式骨架參考 `C:\dev\ai-agent\mcp_server.py`、`mcp_client.py`（MCP SDK v1 寫法）；HITL 參考 `lesson5-4.py`（`mcp_client.py` 本身沒實作攔截）。
 - Codex review 第 1 輪（2026-09-13）8 項＋驗收缺口全部採納，決策摘要見 `docs/decisions.md`。
+- 子項 6、7 寫 dispatch 時（子項 5 Codex review 提醒）：LLM 發出的 tool_call 只接受「實際給 LLM 的工具名」allowlist，不在內就直接回錯誤給 LLM、不詢問使用者；`preview_leave` 只允許 Client 內部 hook 呼叫。
+- 不做（子項 5 Codex review 判斷）：tool 定義的 `strict: true`、通用 JSON Schema 正規化、多 `TextContent` 聚合。
+- 2026-09-15 LLM 由 OpenAI 改為 Anthropic（使用者要求）：模型 `claude-opus-5`、`fallbacks="default"`，手動驗收需要使用者自行在 `.env` 填 `ANTHROPIC_API_KEY`（或 `ant auth login`）。
+- 子項 7 Codex review 4 項全採納：拒答以固定回覆收尾回合（不再與下一句合併重送）；`pause_turn`／`compaction` 直接續呼叫、`model_context_window_exceeded` 清空歷史；400／404 與找不到認證（SDK 丟 `TypeError`）改為結束對話。`chat()` 的 except 本身沒有自動測試（需真 API），分類邏輯抽成 `describe_api_error` 測。

@@ -13,7 +13,7 @@
 | 2 | 依 Codex review 補強文件與工作流 | DONE (claude) | main | — |
 | 3 | Skill 創建 SOP 與範本 | DONE (codex) | main | [tasks/03-skill-creation-sop-review.md](tasks/03-skill-creation-sop-review.md) |
 | 4 | 建立獨立 review skill | DONE (codex) | main | [tasks/04-independent-review-skill.md](tasks/04-independent-review-skill.md) |
-| 5 | HRMS 自然語言請假 Agent | TODO | feat/hrms-leave-agent | [tasks/05-hrms-leave-agent.md](tasks/05-hrms-leave-agent.md) |
+| 5 | HRMS 自然語言請假 Agent | DONE (claude) | feat/hrms-leave-agent（已合併 master） | [tasks/05-hrms-leave-agent.md](tasks/05-hrms-leave-agent.md) |
 
 ## 交接
 
@@ -30,7 +30,7 @@ Claude Code 已起草：
 - #3：完成 SOP 與範本的兩輪 review；修正已由 Claude Code 提交。
 - #4：新增共享 `independent-review` skill，已同步 `.claude/skills/` 與 `.agents/skills/`，並登錄至 `AGENTS.md`。
 
-## 待處理（等實作開始）
+## 待處理
 
-- 選定語言／框架後，定義 `src/` 與測試目錄結構，README 補測試指令與最低驗證要求。
-- 接上 GitHub remote 後，加 PR template。
+- ~~選定語言／框架後，定義 `src/` 與測試目錄結構，README 補測試指令與最低驗證要求。~~ 2026-09-13 已定，見 decisions.md。
+- 已接上 GitHub remote（private），PR template 待補。
