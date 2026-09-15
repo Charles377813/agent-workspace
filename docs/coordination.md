@@ -13,7 +13,7 @@
 | 2 | 依 Codex review 補強文件與工作流 | DONE (claude) | main | — |
 | 3 | Skill 創建 SOP 與範本 | DONE (codex) | main | [tasks/03-skill-creation-sop-review.md](tasks/03-skill-creation-sop-review.md) |
 | 4 | 建立獨立 review skill | DONE (codex) | main | [tasks/04-independent-review-skill.md](tasks/04-independent-review-skill.md) |
-| 5 | HRMS 自然語言請假 Agent | IN PROGRESS (claude) | feat/hrms-leave-agent | [tasks/05-hrms-leave-agent.md](tasks/05-hrms-leave-agent.md) |
+| 5 | HRMS 自然語言請假 Agent | DONE (claude) | feat/hrms-leave-agent（已合併 master） | [tasks/05-hrms-leave-agent.md](tasks/05-hrms-leave-agent.md) |
 
 ## 交接
 

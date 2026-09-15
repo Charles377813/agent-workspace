@@ -3,7 +3,7 @@
 - **編號**：#5（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-leave-agent`（實作時開）
-- **狀態**：IN PROGRESS（架構已過 Codex review 兩輪；子項 2 時間規則、子項 3 服務層已實作）
+- **狀態**：DONE（子項 1～7 完成、手動驗收三情境通過，2026-09-15 合併 `master`）
 
 ## 目標
 
@@ -15,7 +15,7 @@
 
 **資料與環境**
 - [x] `init_db.sql` 可建出五張表與種子資料，整份在一個交易內、重跑完整重置（含 `audit_logs`）
-- [ ] `requirements.txt` 固定 `mcp>=1.28,<2`，照 README 初始化步驟可跑起來
+- [x] `requirements.txt` 固定 `mcp>=1.28,<2`，照 README 初始化步驟可跑起來
 
 **Server／服務層**
 - [x] MCP Server 提供 `query_leave_balance`、`preview_leave`、`apply_leave` 三個工具，皆以 `employee_id` 為必填參數
@@ -34,7 +34,7 @@
 - [x] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
 - [x] `--today` 可固定日期
 - [x] 對話迴圈用 Claude Messages API 手動 tool use 迴圈：同一則回應的 `tool_result` 放同一則 user 訊息、`ok:false` 標 `is_error`、`refusal` 不放回歷史、`MAX_TURNS` 上限；Server 子行程不帶 `ANTHROPIC_*`
-- [ ] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
+- [x] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
 
 ## 驗證方式
 
@@ -47,6 +47,16 @@
 - **Client hook**（mock Server，不連 LLM）：schema 轉換結果；LLM 帶假 `employee_id` 被覆蓋；確認畫面資料來自 apply 的實際參數；按 N 後三表不變；`isError` 與 `ok:false` 兩種錯誤各一
 
 手動（連 LLM，固定 `--today 2026-09-13`）：成功請假、按 N 取消、E002 特休餘額不足。
+
+**手動驗收結果（2026-09-15，`claude-opus-5`，全數通過）**
+
+| 情境 | 畫面 | 資料庫 |
+|---|---|---|
+| E001 按 N | 確認畫面 9/16 14:00–18:00、4 小時、56→52；回「已取消」 | 無變動 |
+| E001 按 y | 同上確認畫面；回單號 1、剩 52 小時 | `leave_requests` #1 SUBMITTED、特休 used 24→28、`audit_logs` 1 筆 APPLY_LEAVE |
+| E002 特休 | 未出現確認畫面，直接回特休已用完並列出其他假別餘額 | 無變動 |
+
+- 觀察：確認畫面出現前輸入 `y`／`N` 會被當成一般對話（不呼叫工具、不寫入），屬預期行為。
 
 ## 異動檔案
 
