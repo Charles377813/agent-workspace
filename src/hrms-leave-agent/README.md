@@ -133,7 +133,8 @@ Client 讀結果的順序：**先看 `isError`** → 是的話轉成統一的錯
 | `INTERNAL_ERROR` | 其他未預期例外；不把原始 exception 內容回給 LLM |
 | `USER_REJECTED` | 使用者在 HITL 按 N（Client 產生，不經 Server） |
 | `INVALID_ARGUMENTS` | LLM 給的工具參數不是 JSON 物件（Client 產生，不呼叫 Server） |
-| `TOOL_CALL_ERROR` | 第 1 層 MCP／SDK 錯誤（`isError: true`），`message` 帶 SDK 文字、最多 500 字，讓 LLM 有機會修正參數（Client 產生） |
+| `UNKNOWN_TOOL` | LLM 呼叫了沒提供給它的工具（含硬叫 `preview_leave`），或 HIGH 工具沒有對應的試算工具（Client 產生，不詢問、不呼叫 Server） |
+| `TOOL_CALL_ERROR` | 第 1 層 MCP／SDK 錯誤（`isError: true`），`message` 帶 SDK 文字、最多 500 字，讓 LLM 有機會修正參數；呼叫時通道拋例外也歸此碼，但只回固定訊息（Client 產生） |
 | `INVALID_TOOL_RESULT` | `isError: false` 但內容不是含布林 `ok` 的 JSON 物件（Client 產生） |
 
 ## 時間與時數規則
@@ -251,14 +252,15 @@ hrms-leave-agent/
 ├── pytest.ini             ✅ pythonpath＝專案目錄，從工作區根目錄或專案內都能跑
 ├── leave_service.py       ✅ 時間規則、驗證、餘額、重疊、寫入交易
 ├── mcp_server.py          ✅ 3 個工具（FastMCP v1，薄包裝轉 JSON）
-├── agent_app.py           🚧 schema 轉換、employee_id 覆蓋、風險分級、結果解析 ✅；HITL、對話迴圈待做
+├── agent_app.py           🚧 schema 轉換、覆蓋、風險分級、結果解析、HITL 分派 ✅；對話迴圈待做
 └── tests/
     ├── conftest.py        ✅ 每個測試建一個暫存 DB
     ├── test_time_rules.py ✅ 50 個案例
     ├── test_leave_service.py ✅ 48 個案例（查詢、試算、交易、重疊、回滾、清理失敗、DB_BUSY、併發）
     ├── test_mcp_server.py ✅ 工具 JSON 格式、錯誤轉換、schema
     ├── test_mcp_channel.py ✅ stdio 子行程：握手 → list_tools → call_tool（測試策略第 2 層）
-    └── test_client_hook.py  🚧 schema 轉換、覆蓋、風險分級、結果解析、接真 Server ✅；HITL 綁定待做（不連 LLM）
+    ├── test_client_hook.py  ✅ schema 轉換、覆蓋、風險分級、結果解析、接真 Server（不連 LLM）
+    └── test_client_hitl.py  ✅ allowlist、試算綁定、y/N、通道例外、接真 Server 寫入／拒絕（不連 LLM）
 ```
 
 ## 測試策略
@@ -280,6 +282,7 @@ pytest src/hrms-leave-agent/tests
 - **沒有登入**：`--employee` 參數就是身分，誰拿到終端機都能以任何員工請假。真實系統要由認證取得身分，Server 端再做授權。
 - **HITL 只在官方 Client**：若有人用其他 MCP Client 直接連這個 Server，`apply_leave` 不會被攔截，也不受 `employee_id` 覆蓋保護。Server 端的檢查只保證資料正確，不保證使用者同意。
 - 不處理國定假日、彈性工時、跨年度、取消假單、主管簽核。
+- 確認畫面的所有動態值（員工、假別、起訖、試算數值、事由）都會把控制字元（換行、`\r`、ANSI、bidi、零寬、Unicode 分行）轉成可見跳脫，並只在顯示時截斷到 200 字，避免 LLM 用這些字元偽造確認畫面；實際送出的參數保持原值。
 - 使用者輸入（含 `reason`）本來就會送進 LLM；安全邊界靠的是 `employee_id` 覆蓋、寫入必經風險表、確認畫面與實際參數綁定、SQL 參數綁定，而不是信任 LLM 的輸出。
 
 ## 初始化

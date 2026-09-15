@@ -30,7 +30,8 @@
 - [x] 給 LLM 的 schema：`employee_id` 同時不在 `properties` 與 `required`；`preview_leave` 不給 LLM
 - [x] 所有 tool_call 無條件以 `--employee` 覆蓋 `employee_id`（`prepare_arguments`；CLI 參數在子項 7 接上）
 - [x] 讀工具結果先檢查 `isError`（SDK 參數驗證錯誤，文字不是 JSON），不是才解析 JSON 看 `ok`；兩種錯誤都轉成可交給 LLM 的結果（README「兩層錯誤契約」）
-- [ ] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
+- [x] LLM 的 tool_call 只接受實際交給 LLM 的工具名，其餘回 `UNKNOWN_TOOL`、不詢問不呼叫
+- [x] 攔下 `apply_leave` 後凍結參數 → Client 自行呼叫 `preview_leave` → 顯示確認 → y 用同一份參數送出；N 回 `USER_REJECTED`；preview 失敗不詢問、直接回錯誤給 LLM
 - [ ] `--today` 可固定日期
 - [ ] 一句「下週三下午請特休」能走完整流程（固定 `--today`）
 
@@ -52,6 +53,7 @@
 - `src/hrms-leave-agent/leave_service.py`、`pytest.ini`、`tests/conftest.py`、`tests/test_time_rules.py`、`tests/test_leave_service.py`（子項 2、3）
 - `src/hrms-leave-agent/mcp_server.py`、`tests/test_mcp_server.py`、`tests/test_mcp_channel.py`（子項 4）
 - `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hook.py`（子項 5）
+- `src/hrms-leave-agent/agent_app.py`、`tests/test_client_hitl.py`（子項 6）
 
 ## 交接事項
 
