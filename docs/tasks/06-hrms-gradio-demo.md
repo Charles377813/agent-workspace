@@ -3,7 +3,7 @@
 - **編號**：#6（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-gradio-demo`
-- **狀態**：IN PROGRESS（設計經 Codex review 3 輪定案，待實作）
+- **狀態**：IN PROGRESS（里程碑 1 完成：async confirm＋worker＋逾時＋強制終止；待里程碑 2）
 
 ## 目標
 
@@ -152,14 +152,14 @@ flowchart LR
 
 ## 驗收條件
 
-- [ ] `dispatch_tool_call` 接受同步與 async confirm；只有 `True` 算同意；原有 248 個測試不退步
+- [x] `dispatch_tool_call` 接受同步與 async confirm；只有 `True` 算同意；原有 248 個測試不退步
 - [ ] Controller 流程：`NeedConfirm` 內容＝凍結參數＋試算；同意後送出同一份參數；取消回 `USER_REJECTED`；試算失敗不產生 `NeedConfirm`
 - [ ] 入場控制：過期 `view_version` 的 send／answer／switch 一律被拒且不改變狀態；兩個 send 同時進入只有一個生效；確認連點只生效一次；BUSY 時排隊的切換員工在回到 IDLE 後仍被拒
 - [ ] answer 在 worker loop 內原子解決；與關閉同時發生時不重複 `set_result`、不例外
 - [ ] 逾時：啟動階段卡住（假 session factory 永不返回）在 `STARTUP_TIMEOUT` 後產生可恢復 `Error` 並回 `IDLE`；工具呼叫逾時轉 `TOOL_CALL_ERROR`
 - [ ] 錯誤分類與回滾：可恢復錯誤後 `messages` 回到 checkpoint；400 清空歷史；401／404／缺認證進 `FATAL`；任何路徑 pending Future 都被解決
-- [ ] 生命週期：真 MCP stdio（經 `demo_server_launcher.py`）跑完一個請假 turn，DB 寫入正確、子行程已結束、PID 檔已刪；等待確認中關閉 controller，turn 收尾且 worker 執行緒可 join
-- [ ] 強制終止：cleanup 卡住（假 context 的 `__aexit__` 不響應取消）時，在 `SHUTDOWN_GRACE＋CANCEL_GRACE` 後依 PID 檔終止行程樹；對「不理會 stdin 關閉」的假 Server 行程，驗證強制終止後行程確實不存在；PID 檔指向已結束行程時不報錯
+- [x] 生命週期：真 MCP stdio（經 `demo_server_launcher.py`）跑完一個請假 turn，DB 寫入正確、子行程已結束、PID 檔已刪；等待確認中關閉 controller，turn 收尾且 worker 執行緒可 join
+- [x] 強制終止：cleanup 卡住（假 context 的 `__aexit__` 不響應取消）時，在 `SHUTDOWN_GRACE＋CANCEL_GRACE` 後依 PID 檔終止行程樹；對「不理會 stdin 關閉」的假 Server 行程，驗證強制終止後行程確實不存在；PID 檔指向已結束行程時不報錯
 - [ ] 請假週曆：查詢用交集且只取 `SUBMITTED`；週起點（週日、週一）；半開區間與相鄰不標；午休不標；部分時數標整格；跨天、跨週末、起點在範圍前跨入、終點跨出範圍；只顯示該員工；未知假別與 `<img …>` 類字串原樣顯示為純文字
 - [ ] UI：Blocks 可建構（smoke test）；聊天區 `sanitize_html=True`、`allow_tags=False`；只綁 `127.0.0.1`、不開 `share`
 - [ ] 手動（瀏覽器，`--reset-db`）：Demo 三情境（按取消、按送出、E002 餘額不足）；送出後週曆「下週三下午」立即變成特休、額度 56→52；取消與餘額不足時不變；checklist：處理中連點送出、處理中按 Enter、確認鈕連點、處理中切換員工 → 都不產生第二個動作
@@ -177,7 +177,7 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
 
 ## 異動檔案
 
-（實作後填）
+- 里程碑 1：`src/hrms-leave-agent/agent_app.py`（Confirm 可 async）、`demo_server_launcher.py`、`demo_worker.py`、`requirements-demo.txt`、`tests/test_confirm_async.py`、`tests/test_demo_lifecycle.py`、`tests/stubborn_server.py`
 
 ## 交接事項
 
@@ -192,3 +192,14 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
 - Codex review 第 1 輪（2026-09-15）8 項全採納：answer 走 `call_soon_threadsafe`、`turn_id`＋不設 UI 逾時、server-side 狀態機＋共用 `concurrency_id`、切換員工僅 `IDLE`、就緒／例外／關閉協定、明確 sanitize、barrier＋真 stdio 測試、每輪重開 stdio 並固定 `gradio==6.27.0`。
 - Codex review 第 2 輪（2026-09-16）全採納：`view_version` 入場控制（排隊不等於拒絕）、answer 的檢查與 `set_result` 整段在 loop 內、啟動／工具／關閉分段逾時、有序關閉（CLOSING → 解 Future → 等 turn → cancel → stop → join）、錯誤時 `messages` 回滾到 checkpoint、demo 專用錯誤分類（400 清空歷史而非 FATAL）、週曆查詢用交集＋`SUBMITTED`、Dataframe 顯式 `datatype="str"`；範圍砍掉重建資料庫按鈕（改 `--reset-db`）與稽核面板，UI 測試降為 smoke test，時間盒改 4 晚。
 - Codex review 第 3 輪（2026-09-16）：第 2 輪各項已解決；`view_version` 前提經 6.27.0 原始碼確認成立（前端 dispatch 時 `gather_state()` 擷取輸入快照，後端 `queueing.py` 存完整 request body，出隊不重讀）；generator 內 version 一致性不成立問題。唯一成立項：取消不是硬上限 → 新增 `demo_server_launcher.py` PID 檔＋兩段截止＋行程樹強制終止，並把關閉／逾時列為第 1 晚里程碑。設計審查到此結束（3 輪上限），進入實作。
+- 專案 venv 已安裝 `gradio==6.27.0`（2026-09-16）。
+- 里程碑 1 實作紀錄（2026-09-16，Codex review 2 輪）：
+  - Windows venv 的 `python.exe` 是轉接程式，會再啟動真正的直譯器：`Popen.pid` ≠ Server PID，PID 檔記的才是真正 Server，印證 PID 檔設計必要。
+  - 強制終止（`force_kill_from_pid_file` → `KillResult`）：終止前驗證身分（命令列要有一個參數完整等於這輪 PID 檔路徑，防 PID 重用誤殺）、終止後輪詢確認消失才刪 PID 檔；失敗保留 PID 檔，`stop()` 最後再清一次並回傳是否全部乾淨。POSIX 只有 `pgid == pid` 才 `killpg`。
+  - 阻塞的查詢／強殺一律 `asyncio.to_thread`，不卡住 worker loop；`ForceKillTimer` 在 PID 檔未出現或失敗時重試。
+  - 關閉流程與計時器同時處理同一 PID 檔：全域鎖序列化（Windows 讀檔同時刪檔會 PermissionError）。
+  - `_close_with_deadline` 以 `base_cancelling`＋自發取消次數精確 `uncancel()`：截止取消不覆蓋 body 的結果／例外，外部取消照樣拋出。
+  - `stop()` 以 loop 內工作真正結束（`_Job`＋Condition）判斷完成，不看對外 Future；「開始前取消」在同一臨界區結算。
+  - 測試輔助的 shield 重試迴圈在 waiter 被取消時會空轉佔住 GIL，拖慢整個測試套件（20 秒 → 3.5 分）；已加 `waiter.cancelled()` 防護。
+  - 驗證：295 個測試通過；生命週期測試重複 15 次穩定、無殘留行程；16 個變異全數被抓到。
+  - Windows 上強制終止要開 PowerShell 查命令列，失敗路徑的測試較慢（生命週期測試約 50 秒）。
