@@ -3,7 +3,7 @@
 - **編號**：#6（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-gradio-demo`
-- **狀態**：IN PROGRESS（里程碑 1 完成：async confirm＋worker＋逾時＋強制終止；待里程碑 2）
+- **狀態**：IN PROGRESS（里程碑 1、2 完成：worker＋逾時＋強制終止、controller 狀態機＋入場控制＋錯誤回滾；待里程碑 3 Gradio 畫面）
 
 ## 目標
 
@@ -153,11 +153,11 @@ flowchart LR
 ## 驗收條件
 
 - [x] `dispatch_tool_call` 接受同步與 async confirm；只有 `True` 算同意；原有 248 個測試不退步
-- [ ] Controller 流程：`NeedConfirm` 內容＝凍結參數＋試算；同意後送出同一份參數；取消回 `USER_REJECTED`；試算失敗不產生 `NeedConfirm`
-- [ ] 入場控制：過期 `view_version` 的 send／answer／switch 一律被拒且不改變狀態；兩個 send 同時進入只有一個生效；確認連點只生效一次；BUSY 時排隊的切換員工在回到 IDLE 後仍被拒
-- [ ] answer 在 worker loop 內原子解決；與關閉同時發生時不重複 `set_result`、不例外
-- [ ] 逾時：啟動階段卡住（假 session factory 永不返回）在 `STARTUP_TIMEOUT` 後產生可恢復 `Error` 並回 `IDLE`；工具呼叫逾時轉 `TOOL_CALL_ERROR`
-- [ ] 錯誤分類與回滾：可恢復錯誤後 `messages` 回到 checkpoint；400 清空歷史；401／404／缺認證進 `FATAL`；任何路徑 pending Future 都被解決
+- [x] Controller 流程：`NeedConfirm` 內容＝凍結參數＋試算；同意後送出同一份參數；取消回 `USER_REJECTED`；試算失敗不產生 `NeedConfirm`
+- [x] 入場控制：過期 `view_version` 的 send／answer／switch 一律被拒且不改變狀態；兩個 send 同時進入只有一個生效；確認連點只生效一次；BUSY 時排隊的切換員工在回到 IDLE 後仍被拒
+- [x] answer 在 worker loop 內原子解決；與關閉同時發生時不重複 `set_result`、不例外
+- [x] 逾時：啟動階段卡住（假 session factory 永不返回）在 `STARTUP_TIMEOUT` 後產生可恢復 `Error` 並回 `IDLE`；工具呼叫逾時轉 `TOOL_CALL_ERROR`
+- [x] 錯誤分類與回滾：可恢復錯誤後 `messages` 回到 checkpoint；400 清空歷史；401／404／缺認證進 `FATAL`；任何路徑 pending Future 都被解決
 - [x] 生命週期：真 MCP stdio（經 `demo_server_launcher.py`）跑完一個請假 turn，DB 寫入正確、子行程已結束、PID 檔已刪；等待確認中關閉 controller，turn 收尾且 worker 執行緒可 join
 - [x] 強制終止：cleanup 卡住（假 context 的 `__aexit__` 不響應取消）時，在 `SHUTDOWN_GRACE＋CANCEL_GRACE` 後依 PID 檔終止行程樹；對「不理會 stdin 關閉」的假 Server 行程，驗證強制終止後行程確實不存在；PID 檔指向已結束行程時不報錯
 - [ ] 請假週曆：查詢用交集且只取 `SUBMITTED`；週起點（週日、週一）；半開區間與相鄰不標；午休不標；部分時數標整格；跨天、跨週末、起點在範圍前跨入、終點跨出範圍；只顯示該員工；未知假別與 `<img …>` 類字串原樣顯示為純文字
@@ -178,6 +178,7 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
 ## 異動檔案
 
 - 里程碑 1：`src/hrms-leave-agent/agent_app.py`（Confirm 可 async）、`demo_server_launcher.py`、`demo_worker.py`、`requirements-demo.txt`、`tests/test_confirm_async.py`、`tests/test_demo_lifecycle.py`、`tests/stubborn_server.py`
+- 里程碑 2：`src/hrms-leave-agent/demo_controller.py`、`tests/test_demo_controller.py`
 
 ## 交接事項
 
@@ -203,3 +204,9 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
   - 測試輔助的 shield 重試迴圈在 waiter 被取消時會空轉佔住 GIL，拖慢整個測試套件（20 秒 → 3.5 分）；已加 `waiter.cancelled()` 防護。
   - 驗證：295 個測試通過；生命週期測試重複 15 次穩定、無殘留行程；16 個變異全數被抓到。
   - Windows 上強制終止要開 PowerShell 查命令列，失敗路徑的測試較慢（生命週期測試約 50 秒）。
+- 里程碑 2 實作紀錄（2026-09-16，Codex review 1 輪）：
+  - 狀態由 worker 在事件發生當下持鎖轉移（`_make_confirm` 進 `AWAIT_CONFIRM`、`_finish_reply`／`_finish_error` 回 `IDLE`／`FATAL`），不經事件佇列；UI handler 以 `wait_until_settled(seen_version)` 等「版本前進且非 BUSY」，所以設計中的 `NeedConfirm`／`Reply`／`Error` 事件與 `turn_id` 過濾簡化為 Condition，行為等價。
+  - `answer()` 先 `call_soon` 排程成功才轉 `BUSY`；loop 已關閉時轉 `FATAL`，不卡在 `BUSY`（Codex 指出）。
+  - 錯誤時在 `_finish_error` 持鎖先回滾 `_messages`（RESET 清空、其他刪到 checkpoint）再轉移狀態；取消（`CancelledError`）視為可恢復並往上拋。
+  - `close()` 以 `before_stop=_reject_any_pending` 關閉：LLM 收到 `USER_REJECTED` 正常收尾，而不是 turn 被強制取消。
+  - 驗證：332 個測試通過（含真 MCP stdio＋SQLite 的 controller 端到端）；controller 測試重複 20 次穩定；18 個變異全數被抓到（第一次有 4 個存活，補測試後全抓）。
