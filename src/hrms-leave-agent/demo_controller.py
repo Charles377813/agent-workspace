@@ -240,7 +240,10 @@ class DemoController:
                 return not self._worker.is_alive
             self._notice = "demo 已關閉。"
             self._bump_locked(State.CLOSING)
-        return self._worker.stop(before_stop=self._reject_any_pending)
+        # Anthropic 的 async HTTP client 只在 worker loop 用過，要在同一個 loop 停止前關閉
+        client_close = getattr(self._client, "close", None)
+        on_loop_close = client_close if callable(client_close) else None
+        return self._worker.stop(before_stop=self._reject_any_pending, on_loop_close=on_loop_close)
 
     # --- worker loop 內 -----------------------------------------------------
 

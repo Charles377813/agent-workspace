@@ -3,7 +3,7 @@
 - **編號**：#6（對應 coordination.md）
 - **負責 agent**：claude
 - **分支**：`feat/hrms-gradio-demo`
-- **狀態**：IN PROGRESS（里程碑 1、2 完成：worker＋逾時＋強制終止、controller 狀態機＋入場控制＋錯誤回滾；待里程碑 3 Gradio 畫面）
+- **狀態**：IN PROGRESS（里程碑 1～3 完成，瀏覽器三情境手動通過；待里程碑 4：防呆 checklist、README）
 
 ## 目標
 
@@ -160,8 +160,8 @@ flowchart LR
 - [x] 錯誤分類與回滾：可恢復錯誤後 `messages` 回到 checkpoint；400 清空歷史；401／404／缺認證進 `FATAL`；任何路徑 pending Future 都被解決
 - [x] 生命週期：真 MCP stdio（經 `demo_server_launcher.py`）跑完一個請假 turn，DB 寫入正確、子行程已結束、PID 檔已刪；等待確認中關閉 controller，turn 收尾且 worker 執行緒可 join
 - [x] 強制終止：cleanup 卡住（假 context 的 `__aexit__` 不響應取消）時，在 `SHUTDOWN_GRACE＋CANCEL_GRACE` 後依 PID 檔終止行程樹；對「不理會 stdin 關閉」的假 Server 行程，驗證強制終止後行程確實不存在；PID 檔指向已結束行程時不報錯
-- [ ] 請假週曆：查詢用交集且只取 `SUBMITTED`；週起點（週日、週一）；半開區間與相鄰不標；午休不標；部分時數標整格；跨天、跨週末、起點在範圍前跨入、終點跨出範圍；只顯示該員工；未知假別與 `<img …>` 類字串原樣顯示為純文字
-- [ ] UI：Blocks 可建構（smoke test）；聊天區 `sanitize_html=True`、`allow_tags=False`；只綁 `127.0.0.1`、不開 `share`
+- [x] 請假週曆：查詢用交集且只取 `SUBMITTED`；週起點（週日、週一）；半開區間與相鄰不標；午休不標；部分時數標整格；跨天、跨週末、起點在範圍前跨入、終點跨出範圍；只顯示該員工；未知假別與 `<img …>` 類字串原樣顯示為純文字
+- [x] UI：Blocks 可建構（smoke test）；聊天區 `sanitize_html=True`、`allow_tags=False`；只綁 `127.0.0.1`、不開 `share`
 - [ ] 手動（瀏覽器，`--reset-db`）：Demo 三情境（按取消、按送出、E002 餘額不足）；送出後週曆「下週三下午」立即變成特休、額度 56→52；取消與餘額不足時不變；checklist：處理中連點送出、處理中按 Enter、確認鈕連點、處理中切換員工 → 都不產生第二個動作
 
 ## 驗證方式
@@ -179,6 +179,7 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
 
 - 里程碑 1：`src/hrms-leave-agent/agent_app.py`（Confirm 可 async）、`demo_server_launcher.py`、`demo_worker.py`、`requirements-demo.txt`、`tests/test_confirm_async.py`、`tests/test_demo_lifecycle.py`、`tests/stubborn_server.py`
 - 里程碑 2：`src/hrms-leave-agent/demo_controller.py`、`tests/test_demo_controller.py`
+- 里程碑 3：`src/hrms-leave-agent/demo_views.py`、`gradio_app.py`、`tests/test_demo_calendar.py`、`tests/test_demo_ui.py`；`demo_worker.py`（`stop(on_loop_close=)`）、`demo_controller.py`（關閉時關 Anthropic client）
 
 ## 交接事項
 
@@ -210,3 +211,12 @@ Gradio queue 的實際排隊行為（觸發當下擷取 `view_version`）以手�
   - 錯誤時在 `_finish_error` 持鎖先回滾 `_messages`（RESET 清空、其他刪到 checkpoint）再轉移狀態；取消（`CancelledError`）視為可恢復並往上拋。
   - `close()` 以 `before_stop=_reject_any_pending` 關閉：LLM 收到 `USER_REJECTED` 正常收尾，而不是 turn 被強制取消。
   - 驗證：332 個測試通過（含真 MCP stdio＋SQLite 的 controller 端到端）；controller 測試重複 20 次穩定；18 個變異全數被抓到（第一次有 4 個存活，補測試後全抓）。
+- 里程碑 3 實作紀錄（2026-09-17，Codex review 1 輪）：
+  - 畫面分兩層：`DemoHandlers` 只產生 `UiModel`（純資料，可不開瀏覽器測），`to_updates` 才轉成 Gradio 更新；handler 收到非 BUSY 結果就結束。
+  - `view_version` 用 `gr.Number(visible=False)`，不用 `gr.State`：State 存在伺服器端，排隊事件輪到時讀到的是最新值，擋不住舊點擊。
+  - 會改狀態的事件（送出、Enter、確認、取消、切換員工）共用 `concurrency_id`＋`concurrency_limit=1`＋`api_visibility="private"`；`demo.load` 另開、不限並行，BUSY 時接手等待結果（重新整理不會卡住）。員工切換綁 `.input`，程式把選單設回原員工不會再觸發。
+  - 週曆改成本週、下週兩張表（列：上午／下午；欄：週一～五），日期標題縮短為「9/14 一」避免橫向捲動。
+  - 啟動：`launch(server_name="127.0.0.1", share=False, footer_links=[])`、`Blocks(analytics_enabled=False)`（不送使用統計）。
+  - **瀏覽器自動翻譯問題**：使用者瀏覽器把繁中再翻一次（「時段」→「贏得」、「下午」→「午安」），且翻譯替換文字節點後 Gradio 更新的是舊節點，額度表停在舊數字。修法：`launch(head=<meta name="google" content="notranslate">, js=設定 html lang="zh-Hant"＋translate="no")`。
+  - Codex 指出並已處理：確認後週曆／額度刷新的測試原本沒寫 DB → 改用真 MCP stdio＋SQLite 驗證 56 → 52 與週曆特休；補事件綁定設定檢查；關閉時在 worker loop 內 `await client.close()`。Gradio queue 實際排隊與前端擷取版本號以瀏覽器手動驗證；DOM 層 HTML 注入列為已知限制（Chatbot sanitize＋Dataframe 字串型別，Codex 未找到觸發確認的途徑）。
+  - 驗證：375 個測試通過；2026-09-17 使用者以 `claude-sonnet-5` 在瀏覽器手動跑完三情境（按取消、按送出後週曆與額度即時更新、E002 餘額不足不出確認）全部正常，花費約 US$0.10。

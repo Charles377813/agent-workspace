@@ -379,12 +379,18 @@ class AgentWorker:
     def is_alive(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    def stop(self, before_stop: Callable[[], None] | None = None) -> bool:
+    def stop(
+        self,
+        before_stop: Callable[[], None] | None = None,
+        *,
+        on_loop_close: Callable[[], Awaitable[None]] | None = None,
+    ) -> bool:
         """有序關閉，回傳是否完全乾淨：工作都結束、Server 都確認消失、worker 執行緒已結束。
 
         1. 拒收新工作；2. 在 loop 內執行 before_stop（例如以 False 解決等待中的確認）；
         3. 等進行中的工作 → 逾時取消 → 再逾時就依 PID 檔強制終止 Server；
-        4. 對仍登記的 PID 檔做最後一次強制終止並驗證；5. 停 loop、join。
+        4. 對仍登記的 PID 檔做最後一次強制終止並驗證；
+        5. 在 loop 內執行 on_loop_close（例如關閉只在這個 loop 用過的 async HTTP client）；6. 停 loop、join。
         """
         with self._lock:
             if self._closed:
@@ -408,6 +414,11 @@ class AgentWorker:
             jobs_done = self._wait_jobs(config.cancel_grace)
 
         servers_gone = self._sweep_pid_files(final=True)
+        if on_loop_close is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(on_loop_close(), loop).result(timeout=config.cancel_grace)
+            except Exception:  # noqa: BLE001 - 清理失敗只記 log，不能中斷關閉
+                logger.warning("關閉前的清理沒有完成", exc_info=True)
         if not jobs_done and servers_gone:
             # 最後一次強殺可能剛讓卡住的工作解開
             jobs_done = self._wait_jobs(config.cancel_grace)

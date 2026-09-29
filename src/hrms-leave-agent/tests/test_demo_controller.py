@@ -546,3 +546,16 @@ def test_wait_until_settled_keeps_waiting_while_busy(make_controller):
 
     gate.release.set()
     assert settle(controller, busy.view).state == State.IDLE
+
+
+def test_close_closes_client_inside_worker_loop(make_controller):
+    closed_in = []
+
+    class ClosableClient(ScriptedClient):
+        async def close(self):
+            closed_in.append(threading.current_thread().name)
+
+    controller = make_controller(ClosableClient(reply("end_turn", text_block("好"))))
+    send(controller, "你好")
+    assert controller.close() is True
+    assert closed_in == ["hrms-demo-worker"]
