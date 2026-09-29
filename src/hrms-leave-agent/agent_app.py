@@ -18,12 +18,13 @@ anthropic／dotenv 只在 chat() 內 import，測試時不需要 API key。
 import argparse
 import asyncio
 import copy
+import inspect
 import json
 import logging
 import os
 import sys
 import unicodedata
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -144,7 +145,8 @@ PREVIEW_TOOLS = {"apply_leave": "preview_leave"}
 LEAVE_TYPE_NAMES = {"ANNUAL": "特休", "PERSONAL": "事假", "SICK": "病假"}
 CONFIRM_ANSWERS = frozenset({"y", "yes"})
 
-Confirm = Callable[[str], bool]
+# 可以是同步（終端機 input()）或 async（Gradio：等瀏覽器按鈕）；只有回傳 True 才算同意
+Confirm = Callable[[str], bool | Awaitable[bool]]
 
 
 def terminal_confirm(prompt: str) -> bool:
@@ -247,7 +249,11 @@ async def dispatch_tool_call(
         # 試算失敗（餘額不足、時間不合法…）不詢問使用者，直接讓 LLM 說明
         return preview
 
-    if not confirm(format_confirmation(frozen, preview)):
+    decision = confirm(format_confirmation(frozen, preview))
+    if inspect.isawaitable(decision):
+        decision = await decision
+    # 只認 True：忘了 await 的 coroutine、"y" 之類的非布林值都不算同意
+    if decision is not True:
         return ClientToolError("USER_REJECTED", "使用者取消送出").to_result()
 
     return await call_tool_safely(session, name, frozen)
