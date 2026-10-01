@@ -78,11 +78,37 @@ HRMS 請假助理（員工 E002，今天 2026-09-13，模型 claude-opus-5）。
 - **身分不由 LLM 決定**：員工一律是啟動參數 `--employee`，LLM 的工具 schema 裡根本沒有 `employee_id`。
 - **寫入前一定經過人**：`apply_leave` 必經 y/N；試算不過（例如餘額不足）連確認都不問。
 
+## Gradio Demo（瀏覽器介面）
+
+在終端機版之上加一層瀏覽器介面：左邊聊天、右邊該員工的請假週曆與額度，送出假單後週曆與額度立即更新。服務層、MCP Server、HITL 邏輯與終端機版共用，只是把「y/N 確認」換成介面上的確認／取消鈕。
+
+```bash
+cd src/hrms-leave-agent
+.venv/Scripts/pip install -r requirements-demo.txt   # requirements.txt ＋ gradio==6.27.0
+.venv/Scripts/python gradio_app.py --reset-db
+```
+
+開啟 http://127.0.0.1:7860。參數：
+
+| 參數 | 用途 | 預設 |
+|---|---|---|
+| `--reset-db` | 啟動前用 `init_db.sql` 重建資料庫（含 `audit_logs`）。預演、錄影前使用，每次都從乾淨的種子資料開始 | 不重建 |
+| `--employee` | 一開始的員工（介面上可切換，E001／E002） | `E001` |
+| `--port` | 埠號 | `7860` |
+| `--no-browser` | 不要自動開瀏覽器 | 自動開 |
+
+使用上的注意事項：
+
+- **只綁 `127.0.0.1`，不開 `share`**。Gradio 的公開分享連結會讓拿到網址的人使用你的 API key，並以任意員工身分請假；本專案沒有登入，所以不提供這個選項。
+- **請不要開瀏覽器的自動翻譯**。翻譯會改動 DOM，可能讓介面事件與狀態錯位；頁面已加上 `notranslate`，但仍建議關閉。
+- 同一時間只處理一個動作：處理中再按送出、Enter、確認鈕或切換員工都會被入場控制（`view_version`）擋掉，不會產生第二個動作；處理中重新整理（F5）後，結果會自動出現。
+- 花費：跑完一個三情境約 US$0.10（`claude-sonnet-5`）。
+
 ## 範圍（MVP）
 
 **做**：一句話請假（例：「下週三下午請特休」）→ LLM 抽出假別與起訖時間 → Client 攔下並請 Server 試算時數與餘額 → 顯示確認內容（y/N）→ 寫入 SQLite ＋ `audit_logs`；另可問「我特休還剩多少」。
 
-**不做**：主管簽核流、串接真實 HR 系統、登入認證、前端網頁、多輪修改或取消假單、國定假日行事曆、跨年度請假、server-side elicitation、ORM
+**不做**：主管簽核流、串接真實 HR 系統、登入認證、終端機以外的前端（Gradio Demo 見上節，僅作展示）、多輪修改或取消假單、國定假日行事曆、跨年度請假、server-side elicitation、ORM
 
 ## 設計原則
 
