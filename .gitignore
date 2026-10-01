@@ -21,3 +21,4 @@ node_modules/
 .DS_Store
 Thumbs.db
 .idea/
+docs/presentation/assets/*.mp4
