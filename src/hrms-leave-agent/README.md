@@ -2,7 +2,7 @@
 
 一句話請假：用自然語言對話完成請假程序，取代「到 HR 平台網頁登記」。
 
-> 狀態：**MVP 完成**——服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作，248 個自動測試通過，2026-09-15 以真實 Claude API 手動驗收三情境通過。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
+> 狀態：**MVP 完成**——服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作，2026-09-15 以真實 Claude API 手動驗收三情境通過。之後加上 Gradio Demo，目前共 375 個自動測試通過（2026-10-09 重跑）。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
 
 ## Demo
 
