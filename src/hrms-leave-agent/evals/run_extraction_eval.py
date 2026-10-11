@@ -54,9 +54,25 @@ def judge(case: dict, tool_uses: list) -> tuple[bool, str]:
     return expected is None or got == expected, f"leave_type={got}"
 
 
+def print_usage(usage: dict, calls: int, price_in: float | None, price_out: float | None) -> None:
+    """印出 token 用量與單次平均；單價由呼叫端提供（價格會變，不寫死）。快取單價不同，費用估算只算一般輸入。"""
+    if not calls:
+        return
+    print(
+        f"token 用量：輸入 {usage['input']}、輸出 {usage['output']}、"
+        f"快取讀 {usage['cache_read']}、快取寫 {usage['cache_write']}"
+    )
+    print(f"每次呼叫平均：輸入 {usage['input'] / calls:.0f}、輸出 {usage['output'] / calls:.0f}")
+    if price_in is not None and price_out is not None:
+        cost = (usage["input"] * price_in + usage["output"] * price_out) / 1_000_000
+        print(f"估算費用：約 ${cost:.4f}（每次約 ${cost / calls:.5f}；未含快取讀寫的差價）")
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="每題重複次數")
+    parser.add_argument("--price-in", type=float, help="輸入 token 單價（美元／百萬 token），與 --price-out 一起給才估費用")
+    parser.add_argument("--price-out", type=float, help="輸出 token 單價（美元／百萬 token）")
     args = parser.parse_args()
 
     load_dotenv(PROJECT_DIR / ".env")
@@ -76,6 +92,7 @@ async def main() -> None:
     system = build_system_prompt(date.fromisoformat(TODAY), EMPLOYEE)
     print(f"模型 {model}，今天 {TODAY}，每題 {args.runs} 次\n")
     passed = total = 0
+    usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
     for case in CASES:
         for run in range(args.runs):
             response = await client.beta.messages.create(
@@ -86,11 +103,16 @@ async def main() -> None:
                 messages=[{"role": "user", "content": case["text"]}],
                 **fallback_options(model),
             )
+            usage["input"] += response.usage.input_tokens or 0
+            usage["output"] += response.usage.output_tokens or 0
+            usage["cache_read"] += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage["cache_write"] += getattr(response.usage, "cache_creation_input_tokens", 0) or 0
             ok, detail = judge(case, [b for b in response.content if b.type == "tool_use"])
             total += 1
             passed += ok
             print(f"{'✅' if ok else '❌'} #{case['id']:>2} [{case['kind']}] {case['text']}  →  {detail}")
     print(f"\n結果：{passed}/{total}")
+    print_usage(usage, total, args.price_in, args.price_out)
 
 
 if __name__ == "__main__":
