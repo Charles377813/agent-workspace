@@ -71,4 +71,6 @@ def test_stdio_channel_end_to_end(db_path, db):
 
     # 子行程確實寫進同一個暫存 DB
     assert db.execute("SELECT COUNT(*) FROM leave_requests").fetchone()[0] == 1
-    assert db.execute("SELECT COUNT(*) FROM audit_logs").fetchone()[0] == 1
+    # 一筆成功（apply）＋一筆失敗（重疊被拒）
+    audits = db.execute("SELECT outcome, error_code FROM audit_logs ORDER BY id").fetchall()
+    assert [tuple(row) for row in audits] == [("SUCCESS", None), ("FAILURE", "OVERLAPPING_REQUEST")]

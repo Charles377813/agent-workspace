@@ -1,0 +1,8 @@
+日期: 2026-10-14
+工具: pip-audit 2.10.1（漏洞來源預設 PyPI Advisory）
+指令 1: pip-audit -r src/hrms-leave-agent/requirements.lock --no-deps --disable-pip
+--- 結果 1（鎖定檔，78 個固定版本套件）
+No known vulnerabilities found
+指令 2: pip-audit -r src/hrms-leave-agent/requirements-demo.txt（先解析相依再掃）
+--- 結果 2
+No known vulnerabilities found

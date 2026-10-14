@@ -14,11 +14,13 @@ WED_AM = ("2026-09-16T09:00", "2026-09-16T13:00")  # 4 小時
 
 
 def snapshot(db):
-    """三張會被 apply 動到的表的完整內容。"""
-    return {
-        table: [tuple(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY 1, 2")]
-        for table in ("leave_balances", "leave_requests", "audit_logs")
+    """三張會被 apply 動到的表的內容；audit_logs 只取 SUCCESS（失敗另記 FAILURE 紀錄，見 test_audit_log.py）。"""
+    tables = {
+        "leave_balances": "SELECT * FROM leave_balances",
+        "leave_requests": "SELECT * FROM leave_requests",
+        "audit_logs": "SELECT * FROM audit_logs WHERE outcome = 'SUCCESS'",
     }
+    return {name: [tuple(row) for row in db.execute(f"{sql} ORDER BY 1, 2")] for name, sql in tables.items()}
 
 
 def remaining(db, employee_id, leave_type, year=2026):

@@ -1,9 +1,14 @@
 -- hrms-leave-agent 資料表與種子資料
 -- 以「小時」計假（1 天 = 8 小時），才能處理半天假
--- 整份包在一個交易裡；重跑會完整重置所有資料（含 audit_logs）
+-- 整份包在一個交易裡；重跑會完整重置所有資料（含 audit_logs，重置是明確的維運動作）
+-- audit_logs 用 DROP TABLE 重建：舊 schema 的 leave.db 重跑本檔即升級，且不必刪除被 trigger 保護的紀錄
 -- 注意：外鍵要在「每個」連線上 PRAGMA foreign_keys = ON 才生效，應用程式連線時自己開
 
 BEGIN;
+
+DROP TRIGGER IF EXISTS audit_logs_no_update;
+DROP TRIGGER IF EXISTS audit_logs_no_delete;
+DROP TABLE IF EXISTS audit_logs;
 
 CREATE TABLE IF NOT EXISTS employees (
     id TEXT PRIMARY KEY,
@@ -38,15 +43,27 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS audit_logs (
+-- 稽核紀錄：成功與失敗都記；欄位結構化；應用層不能 UPDATE／DELETE（trigger）
+-- 限制：trigger 擋的是應用程式誤改與一般竄改；能直接改 DB 檔的人仍可 DROP TRIGGER
+CREATE TABLE audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_type TEXT NOT NULL,
+    actor TEXT NOT NULL,  -- 呼叫端宣稱的 employee_id（尚無認證，見 README 已知限制）
+    outcome TEXT NOT NULL CHECK (outcome IN ('SUCCESS', 'FAILURE')),
+    error_code TEXT,  -- 失敗時的 LeaveError.error_code
+    leave_request_id INTEGER,  -- 成功時對應的假單 id
     detail TEXT NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((outcome = 'SUCCESS') = (error_code IS NULL))
 );
 
--- 種子資料（先刪子表再刪父表）
-DELETE FROM audit_logs;
+CREATE TRIGGER audit_logs_no_update BEFORE UPDATE ON audit_logs
+BEGIN SELECT RAISE(ABORT, 'audit_logs is append-only'); END;
+
+CREATE TRIGGER audit_logs_no_delete BEFORE DELETE ON audit_logs
+BEGIN SELECT RAISE(ABORT, 'audit_logs is append-only'); END;
+
+-- 種子資料（先刪子表再刪父表；audit_logs 已在上方重建）
 DELETE FROM leave_requests;
 DELETE FROM leave_balances;
 DELETE FROM leave_types;
