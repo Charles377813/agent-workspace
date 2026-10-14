@@ -249,6 +249,41 @@ def preview_leave(
     return _run(db_path, work, write=False)
 
 
+AUDIT_DETAIL_MAX = 300
+
+
+def _audit_actor(employee_id) -> str:
+    """合法字串原樣記；非字串、含控制字元或超長的偽造輸入改記 repr 並截斷。"""
+    if isinstance(employee_id, str) and employee_id.isprintable() and len(employee_id) <= 64:
+        return employee_id
+    return repr(employee_id)[:64]
+
+
+def _record_failure(db_path, employee_id, leave_type, start_at, end_at, exc: LeaveError) -> None:
+    """失敗的 apply 另開一個交易寫稽核（原交易已回滾，寫在裡面會一起消失）。
+
+    盡力而為：稽核寫入本身失敗時只吞掉，不蓋掉原本的業務錯誤給呼叫端的回應。
+    輸入值一律 repr 並截斷，避免換行或超長內容污染紀錄。
+    """
+    detail = (
+        f"申請失敗：員工 {employee_id!r} {leave_type!r} {start_at!r}～{end_at!r}；{exc.message}"
+    )[:AUDIT_DETAIL_MAX]
+    conn = None
+    try:
+        conn = connect(db_path)
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "INSERT INTO audit_logs (action_type, actor, outcome, error_code, detail)"
+            " VALUES ('APPLY_LEAVE', ?, 'FAILURE', ?, ?)",
+            (_audit_actor(employee_id), exc.error_code, detail),
+        )
+        conn.execute("COMMIT")
+    except Exception:  # noqa: BLE001 - 稽核寫入失敗不應改變對呼叫端的回應
+        _rollback(conn)
+    finally:
+        _close(conn)
+
+
 def apply_leave(
     employee_id: str,
     leave_type: str,
@@ -258,7 +293,15 @@ def apply_leave(
     *,
     db_path=None,
 ) -> dict:
-    """在單一 BEGIN IMMEDIATE 交易內重新驗證、扣抵、寫假單、寫稽核。"""
+    """在單一 BEGIN IMMEDIATE 交易內重新驗證、扣抵、寫假單、寫稽核；失敗另記一筆 FAILURE 稽核。"""
+    try:
+        return _apply_leave_tx(employee_id, leave_type, start_at, end_at, reason, db_path=db_path)
+    except LeaveError as exc:
+        _record_failure(db_path, employee_id, leave_type, start_at, end_at, exc)
+        raise
+
+
+def _apply_leave_tx(employee_id, leave_type, start_at, end_at, reason, *, db_path=None) -> dict:
 
     def work(conn):
         result = _evaluate(conn, employee_id, leave_type, start_at, end_at)
@@ -280,9 +323,12 @@ def apply_leave(
             (employee_id, leave_type, start_at, end_at, hours, reason),
         ).lastrowid
         conn.execute(
-            "INSERT INTO audit_logs (action_type, detail) VALUES (?, ?)",
+            "INSERT INTO audit_logs (action_type, actor, outcome, leave_request_id, detail)"
+            " VALUES (?, ?, 'SUCCESS', ?, ?)",
             (
                 "APPLY_LEAVE",
+                employee_id,
+                request_id,
                 f"假單 #{request_id}：員工 {employee_id} {leave_type} {start_at}～{end_at} 共 {hours} 小時",
             ),
         )

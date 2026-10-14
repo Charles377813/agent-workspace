@@ -1,0 +1,10 @@
+日期: 2026-10-14
+環境: Windows 11、Python 3.13.5、pytest 9.1.1
+指令: cd src/hrms-leave-agent && .venv/Scripts/python -m pytest -q
+
+## 基線（補強前，HEAD 2f069aa，未改動的工作目錄）
+375 passed in 382.22s (0:06:22)
+
+## 補強後（HEAD 2f069aa + 未 commit 的稽核補強改動；commit 後以該 commit 重現）
+388 passed in 125.15s (0:02:05)
+新增 13 個測試（tests/test_audit_log.py）；375 + 13 = 388

@@ -2,7 +2,7 @@
 
 一句話請假：用自然語言對話完成請假程序，取代「到 HR 平台網頁登記」。
 
-> 狀態：**MVP 完成**——服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作，2026-09-15 以真實 Claude API 手動驗收三情境通過。之後加上 Gradio Demo，目前共 375 個自動測試通過（2026-10-09 重跑）。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
+> 狀態：**MVP 完成**——服務層、MCP Server、Client（schema 轉換、HITL、對話迴圈）已實作，2026-09-15 以真實 Claude API 手動驗收三情境通過。之後加上 Gradio Demo，目前共 388 個自動測試通過（2026-10-14 重跑，含稽核紀錄補強後新增的 13 個）。任務與驗收條件見 [docs/tasks/05-hrms-leave-agent.md](../../docs/tasks/05-hrms-leave-agent.md)。
 
 ## Demo
 
@@ -51,7 +51,7 @@ HRMS 請假助理（員工 E001，今天 2026-09-13，模型 claude-opus-5）。
 |---|---|---|
 | `leave_requests` | 0 筆 | #1：E001、ANNUAL、2026-09-16T14:00～18:00、4 小時、`SUBMITTED` |
 | `leave_balances`（E001 特休） | used 24 | used 28 |
-| `audit_logs` | 0 筆 | 1 筆 `APPLY_LEAVE` |
+| `audit_logs` | 0 筆 | 1 筆 `APPLY_LEAVE`（`outcome = SUCCESS`） |
 
 ### 3. 餘額不足：不會出現確認畫面
 
@@ -296,7 +296,7 @@ try:
      AND total_hours - used_hours >= :hours      -- 條件式扣抵
   rowcount = 0 → ROLLBACK，回 INSUFFICIENT_BALANCE（含無額度資料）
   INSERT leave_requests
-  INSERT audit_logs ('APPLY_LEAVE', 員工／假別／起訖／時數)
+  INSERT audit_logs (APPLY_LEAVE, actor, SUCCESS, 假單 id, 員工／假別／起訖／時數)
   COMMIT
 except database is locked → 若 in_transaction 則 ROLLBACK，回 DB_BUSY
 except 其他例外           → 若 in_transaction 則 ROLLBACK，回 INTERNAL_ERROR
@@ -348,7 +348,7 @@ finally: conn.close()
 
 ## 資料表
 
-見 [init_db.sql](init_db.sql)。整份腳本包在一個交易裡，重跑會**完整重置**所有資料（含 `audit_logs`）：
+見 [init_db.sql](init_db.sql)。整份腳本包在一個交易裡，重跑會**完整重置**所有資料（含 `audit_logs`，用 `DROP TABLE` 重建，所以舊 schema 的 `leave.db` 重跑即升級；已有舊 `leave.db` 要用 `--reset-db` 重建才有新欄位與 trigger）：
 
 | 表 | 內容 |
 |---|---|
@@ -356,7 +356,7 @@ finally: conn.close()
 | `leave_types` | 假別：`ANNUAL` 特休、`PERSONAL` 事假、`SICK` 病假 |
 | `leave_balances` | 員工 × 假別 × 年度的 `total_hours`／`used_hours` |
 | `leave_requests` | 請假紀錄，`status` 目前只有 `SUBMITTED` |
-| `audit_logs` | 寫入稽核 |
+| `audit_logs` | 稽核紀錄：結構化欄位（`actor`、`outcome`、`error_code`、`leave_request_id`），成功與失敗的 `apply_leave` 都記；失敗另開交易寫，不被業務交易的回滾帶走。`UPDATE`／`DELETE` 由 trigger 擋下（append-only）。限制：能直接改 DB 檔的人仍可 `DROP TRIGGER`，這是防誤改與一般竄改，不是防有檔案寫入權的人 |
 
 種子資料刻意安排：**E002 的特休已用完**（測餘額不足），E001 各假別都有餘額（測成功路徑）。
 
@@ -402,6 +402,7 @@ pytest src/hrms-leave-agent/tests
 
 - **沒有登入**：`--employee` 參數就是身分，誰拿到終端機都能以任何員工請假。真實系統要由認證取得身分，Server 端再做授權。
 - **HITL 只在官方 Client**：若有人用其他 MCP Client 直接連這個 Server，`apply_leave` 不會被攔截，也不受 `employee_id` 覆蓋保護。Server 端的檢查只保證資料正確，不保證使用者同意。
+- **稽核紀錄範圍**：只記 `apply_leave` 的成功與失敗；使用者在確認畫面按取消、以及查詢動作發生在 Client 端，目前沒有紀錄。`actor` 是呼叫端宣稱的 `employee_id`，在補上認證前不等於已驗證身分。
 - 不處理國定假日、彈性工時、跨年度、取消假單、主管簽核。
 - 確認畫面的所有動態值（員工、假別、起訖、試算數值、事由）都會把控制字元（換行、`\r`、ANSI、bidi、零寬、Unicode 分行）轉成可見跳脫，並只在顯示時截斷到 200 字，避免 LLM 用這些字元偽造確認畫面；實際送出的參數保持原值。
 - 使用者輸入（含 `reason`）本來就會送進 LLM；安全邊界靠的是 `employee_id` 覆蓋、寫入必經風險表、確認畫面與實際參數綁定、SQL 參數綁定，而不是信任 LLM 的輸出。
@@ -411,7 +412,7 @@ pytest src/hrms-leave-agent/tests
 ```bash
 cd src/hrms-leave-agent
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
+.venv/Scripts/pip install -r requirements.txt   # 要完全重現已測過的版本：pip install -r requirements.lock
 python -c "import sqlite3; c=sqlite3.connect('leave.db'); c.executescript(open('init_db.sql', encoding='utf-8').read()); c.close()"
 cp .env.example .env   # 填入 API key
 .venv/Scripts/python agent_app.py --employee E001 --today 2026-09-13
