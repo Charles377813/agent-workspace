@@ -1,8 +1,18 @@
 日期: 2026-10-14
 工具: gitleaks 8.30.1（官方 release，已核對 SHA256）
-掃描對象: 本 repo 所有分支的完整 git 歷史（git rev-list --all：30 個 commit，其中 28 個非 merge；gitleaks 報告實際掃描 27 個，差 1 個，原因未查明）
+掃描對象: 本 repo 所有分支的完整 git 歷史（git rev-list --all：30 個 commit，其中 28 個非 merge；gitleaks 報告實際掃描 27 個，差 1 個）
 指令: gitleaks git --redact --no-banner --log-opts="--all" -v .
 ---
 7:26PM INF 27 commits scanned.
 7:26PM INF scanned ~385377 bytes (385.38 KB) in 325ms
 7:26PM INF no leaks found
+
+差 1 個的原因（推論）：當時 28 個非 merge commit 中，只有 4c53545（只新增 PNG 圖檔）的 patch 全是二進位、沒有文字新增行，29−1＝28 吻合；gitleaks 沒有輸出被略過的 commit，所以這是推論，不是直接證明。
+
+=== 重掃（合併 PR #1 之後）===
+日期: 2026-10-14；HEAD: 6a05fae；同工具、同指令
+非 merge commit 數: 29（含 PR #1 的 90c40f1）
+---
+8:16PM INF 28 commits scanned.
+8:16PM INF scanned ~421758 bytes (421.76 KB) in 241ms
+8:16PM INF no leaks found

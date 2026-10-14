@@ -84,7 +84,7 @@ HRMS 請假助理（員工 E002，今天 2026-09-13，模型 claude-opus-5）。
 
 ```bash
 cd src/hrms-leave-agent
-.venv/Scripts/pip install -r requirements-demo.txt   # requirements.txt ＋ gradio==6.27.0
+.venv/Scripts/pip install -r requirements.lock   # 已測過的固定版本（含 gradio）；範圍版本寫在 requirements-demo.txt／requirements.txt，CI 掃描的是 lock 檔
 .venv/Scripts/python gradio_app.py --reset-db
 ```
 
@@ -367,6 +367,7 @@ hrms-leave-agent/
 ├── README.md
 ├── init_db.sql            ✅ 建表＋種子資料
 ├── requirements.txt       ✅
+├── requirements.lock      ✅ 固定版本（78 個），pip-audit 掃描對象
 ├── .env.example           ✅
 ├── .gitignore             ✅ 排除 leave.db、.env
 ├── pytest.ini             ✅ pythonpath＝專案目錄，從工作區根目錄或專案內都能跑
@@ -412,7 +413,7 @@ pytest src/hrms-leave-agent/tests
 ```bash
 cd src/hrms-leave-agent
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt   # 要完全重現已測過的版本：pip install -r requirements.lock
+.venv/Scripts/pip install -r requirements.lock   # 已測過的固定版本；範圍版本寫在 requirements.txt，更新 lock 檔的指令見 docs/isms/README.md
 python -c "import sqlite3; c=sqlite3.connect('leave.db'); c.executescript(open('init_db.sql', encoding='utf-8').read()); c.close()"
 cp .env.example .env   # 填入 API key
 .venv/Scripts/python agent_app.py --employee E001 --today 2026-09-13
