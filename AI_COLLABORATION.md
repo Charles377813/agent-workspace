@@ -4,7 +4,7 @@ Claude Code 與 Codex 在這個工作區協作的共同規則來源。`CLAUDE.md
 
 專案的目錄架構、分支與 commit 慣例、任務板用法寫在 [README.md](README.md) 與 [docs/coordination.md](docs/coordination.md)，本檔不重複。
 
-> 這套協作模型沿用自 `C:\Obsidian Vault\AI_COLLABORATION.md`，讓兩個場域切換時心智模型一致。差異：那邊是筆記庫，這邊是程式專案。
+> 這套協作模型沿用自個人 vault 的 `AI_COLLABORATION.md`，讓兩個場域切換時心智模型一致。差異：那邊是筆記庫，這邊是程式專案。
 
 ## 角色分工
 
