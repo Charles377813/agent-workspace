@@ -23,13 +23,29 @@ VALID_START_HOURS = frozenset({9, 10, 11, 12, 14, 15, 16, 17})
 VALID_END_HOURS = frozenset({10, 11, 12, 13, 15, 16, 17, 18})
 
 
+RETRY_SAFE = "safe"        # 稍後原樣重試是安全的
+RETRY_NO = "no"            # 重試只會得到同樣結果，須改參數或回報使用者
+RETRY_UNKNOWN = "unknown"  # 不確定動作是否已生效，不得自動重試
+
+# 未列出的錯誤碼一律 no（業務規則錯誤）
+_RETRY_BY_CODE = {
+    "DB_BUSY": RETRY_SAFE,
+    "INTERNAL_ERROR": RETRY_UNKNOWN,
+}
+
+
+def retry_disposition(error_code: str) -> str:
+    return _RETRY_BY_CODE.get(error_code, RETRY_NO)
+
+
 class LeaveError(Exception):
-    """業務錯誤，error_code 對應 README 的錯誤碼表。"""
+    """業務錯誤，error_code 對應 README 的錯誤碼表；retry 由錯誤碼決定。"""
 
     def __init__(self, error_code: str, message: str):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
+        self.retry = retry_disposition(error_code)
 
 
 def parse_time(value: str) -> datetime:

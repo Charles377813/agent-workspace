@@ -157,7 +157,7 @@ def test_parse_success_json():
 
 
 def test_parse_business_error_json_passes_through():
-    raw = '{"ok": false, "error_code": "INSUFFICIENT_BALANCE", "message": "不足"}'
+    raw = '{"ok": false, "error_code": "INSUFFICIENT_BALANCE", "message": "不足", "retry": "no"}'
     assert parse_tool_result(text_result(raw)) == json.loads(raw)
 
 
@@ -167,6 +167,7 @@ def test_parse_sdk_error_is_not_json_decoded():
         "ok": False,
         "error_code": "TOOL_CALL_ERROR",
         "message": "Error executing tool preview_leave: 1 validation error",
+        "retry": "no",
     }
 
 

@@ -162,7 +162,7 @@ def test_server_mutating_received_arguments_cannot_change_what_is_submitted():
 def test_user_rejects_apply_is_not_called():
     session = FakeSession({"preview_leave": json_result(PREVIEW_OK)})
     result = dispatch(session, "apply_leave", APPLY_ARGS, RecordingConfirm(False))
-    assert result == {"ok": False, "error_code": "USER_REJECTED", "message": "使用者取消送出"}
+    assert result == {"ok": False, "error_code": "USER_REJECTED", "message": "使用者取消送出", "retry": "no"}
     assert [name for name, _ in session.calls] == ["preview_leave"]
 
 

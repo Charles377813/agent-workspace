@@ -63,7 +63,12 @@ def test_unexpected_exception_becomes_internal_error_without_leaking(monkeypatch
 
     monkeypatch.setattr(mcp_server.leave_service, "preview_leave", broken)
     raw = mcp_server.preview_leave("E001", "ANNUAL", *WED_PM)
-    assert json.loads(raw) == {"ok": False, "error_code": "INTERNAL_ERROR", "message": "系統錯誤，請稍後再試"}
+    assert json.loads(raw) == {
+        "ok": False,
+        "error_code": "INTERNAL_ERROR",
+        "message": "系統錯誤，請稍後再試",
+        "retry": "unknown",
+    }
     assert "secret" not in raw
     # 細節留在 Server log，方便除錯
     assert "secret internal detail" in caplog.text

@@ -21,12 +21,17 @@ mcp = FastMCP("HRMS Leave MCP Server")
 logger = logging.getLogger(__name__)
 
 
-def _error_json(error_code: str, message: str) -> str:
-    return json.dumps({"ok": False, "error_code": error_code, "message": message}, ensure_ascii=False)
+def _error_json(error_code: str, message: str, retry: str) -> str:
+    return json.dumps(
+        {"ok": False, "error_code": error_code, "message": message, "retry": retry},
+        ensure_ascii=False,
+    )
 
 
 def _respond(fn, *args, **kwargs) -> str:
-    """成功 {"ok": true, ...}；業務錯誤 {"ok": false, "error_code", "message"}。
+    """成功 {"ok": true, ...}；業務錯誤 {"ok": false, "error_code", "message", "retry"}。
+
+    retry 為 safe（可原樣重試）／no（重試無用）／unknown（不確定是否已生效，不得自動重試）。
 
     非預期例外（含 JSON 序列化失敗）也轉成 INTERNAL_ERROR，不讓 FastMCP 把原始例外文字回給 Client。
     完整 traceback 只寫進 Server 的 log（stderr；stdout 被 JSON-RPC 佔用）。
@@ -34,10 +39,12 @@ def _respond(fn, *args, **kwargs) -> str:
     try:
         return json.dumps({"ok": True, **fn(*args, **kwargs)}, ensure_ascii=False)
     except LeaveError as exc:
-        return _error_json(exc.error_code, exc.message)
+        return _error_json(exc.error_code, exc.message, exc.retry)
     except Exception:
         logger.exception("tool 執行發生非預期例外")
-        return _error_json("INTERNAL_ERROR", "系統錯誤，請稍後再試")
+        return _error_json(
+            "INTERNAL_ERROR", "系統錯誤，請稍後再試", leave_service.retry_disposition("INTERNAL_ERROR")
+        )
 
 
 @mcp.tool()

@@ -189,7 +189,9 @@ sequenceDiagram
 
 ## 工具規格
 
-所有工具回傳 **JSON 字串**：成功 `{"ok": true, ...}`，失敗 `{"ok": false, "error_code": "...", "message": "..."}`。
+所有工具回傳 **JSON 字串**：成功 `{"ok": true, ...}`，失敗 `{"ok": false, "error_code": "...", "message": "...", "retry": "..."}`。
+
+`retry` 告訴 agent 失敗後能不能再試：`safe`＝稍後原樣重試安全（只有 `DB_BUSY`，交易已回滾）；`no`＝重試無用，須改參數或向使用者說明（業務規則錯誤、`USER_REJECTED` 等）；`unknown`＝不確定動作是否已生效，**不得自動重試**（`INTERNAL_ERROR`、通道例外、回傳內容壞掉），應請使用者先查結果。Server 沒給或給了未知值時，Client 補成 `unknown`。對應錯誤碼見下方「錯誤碼」表。
 
 ### 兩層錯誤契約（Client 必須依序處理）
 
@@ -220,6 +222,8 @@ Client 讀結果的順序：**先看 `isError`** → 是的話轉成統一的錯
 
 ### 錯誤碼
 
+`retry` 欄預設值：表內沒標的一律 `no`；`TOOL_CALL_ERROR` 依來源不同（SDK 參數驗證＝`no`，通道例外＝`unknown`）；`INVALID_TOOL_RESULT`（Client 發現回傳壞掉）＝`unknown`。
+
 | error_code | 情境 |
 |---|---|
 | `EMPLOYEE_NOT_FOUND` | 員工不存在 |
@@ -229,8 +233,8 @@ Client 讀結果的順序：**先看 `isError`** → 是的話轉成統一的錯
 | `CROSS_YEAR_NOT_SUPPORTED` | 起訖不同年 |
 | `INSUFFICIENT_BALANCE` | 餘額不足，**或該員工該假別該年度沒有額度資料**（MVP 視為同一種） |
 | `OVERLAPPING_REQUEST` | 與既有假單時間重疊 |
-| `DB_BUSY` | 拿不到寫入鎖（`database is locked`） |
-| `INTERNAL_ERROR` | 其他未預期例外；不把原始 exception 內容回給 LLM |
+| `DB_BUSY` | 拿不到寫入鎖（`database is locked`）；`retry: safe` |
+| `INTERNAL_ERROR` | 其他未預期例外；不把原始 exception 內容回給 LLM；`retry: unknown` |
 | `USER_REJECTED` | 使用者在 HITL 按 N（Client 產生，不經 Server） |
 | `INVALID_ARGUMENTS` | LLM 給的工具參數不是 JSON 物件（Client 產生，不呼叫 Server） |
 | `UNKNOWN_TOOL` | LLM 呼叫了沒提供給它的工具（含硬叫 `preview_leave`），或 HIGH 工具沒有對應的試算工具（Client 產生，不詢問、不呼叫 Server） |
