@@ -29,7 +29,7 @@
 | R8 | Anthropic API key | key 外洩或被盜用 | `.env` 在 `.gitignore`、從未進 git 歷史；子行程移除 `ANTHROPIC_*`；Gradio 不開 share 就是為了避免他人使用 key（README） | key 明文存本機 `.env`；無輪替紀錄；無 secret scanning；repo 為公開，疏漏一次就外洩 | 2×2=4 | 中 | 2×2=4 | 中 | 部分處理：新增 gitleaks 完整歷史掃描與 CI 每次 push 掃描（事後偵測）。殘餘：金鑰仍明文在本機 .env、無輪替流程、無 pre-commit 阻擋 |
 | R9 | 本機 Gradio demo | 同機其他程序或使用者連到 `127.0.0.1:7860` 後以任一員工操作 | 只綁本機、不開 share；入場控制 `view_version`（decisions.md 2026-09-16） | 本機服務無認證 | 1×2=2 | 低 | 1×2=2 | 低 | 維持，展示完即關閉 |
 | R10 | `leave.db` | 資料遺失、誤重置 | 種子資料可由 `init_db.sql` 重建；`leave.db` 不進 git | 無備份與還原演練；`--reset-db` 會清空所有資料含稽核 | 2×2=4 | 中 | 2×2=4 | 中 | 未處理（第二階段） |
-| R11 | 相依套件 | 套件漏洞、供應鏈風險 | `mcp>=1.28,<2`、`anthropic>=1.5,<2`、`gradio==6.27.0` 有版本約束 | `python-dotenv`、`pytest` 未釘版；無鎖定檔；無漏洞掃描 | 2×2=4 | 中 | 1×2=2 | 低 | 已處理：產生 requirements.lock（78 個固定版本）、pip-audit 本機與 CI 掃描，結果 0 個已知漏洞（2026-10-14）。殘餘：掃描只涵蓋已公開漏洞，鎖定檔需定期更新 |
+| R11 | 相依套件 | 套件漏洞、供應鏈風險 | `mcp>=1.28,<2`、`anthropic>=1.5,<2`、`gradio==6.27.0` 有版本約束 | `python-dotenv`、`pytest` 未釘版；無鎖定檔；無漏洞掃描 | 2×2=4 | 中 | 1×2=2 | 低 | 已處理：產生 requirements.lock（78 個固定版本）、pip-audit 本機與 CI 掃描，結果 0 個已知漏洞（2026-10-14）。2026-11-25 更新：`gradio` 升至 6.32.0 並重產 lock，CI `pip-audit` 回報無已知漏洞。殘餘：掃描只涵蓋已公開漏洞，鎖定檔需定期更新 |
 | R12 | 錯誤訊息 | 錯誤訊息洩漏內部資訊 | 非預期例外只回固定訊息，traceback 只進 stderr（`mcp_server.py:28-40`、`leave_service.py:139-142`） | SDK 錯誤文字最多 500 字會回給 LLM（`agent_app.py:125`），內容可能含參數細節 | 1×1=1 | 低 | 1×1=1 | 低 | 維持，觀察 |
 | R13 | 假單與稽核資料保存 | 沒有保存期限與刪除規則 | 現況是虛構資料 | 無保存與刪除政策 | 2×2=4 | 中 | 2×2=4 | 中 | 未處理（第二階段） |
 
