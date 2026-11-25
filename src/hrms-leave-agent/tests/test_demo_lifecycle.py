@@ -291,6 +291,16 @@ def test_force_kill_handles_missing_or_invalid_pid_file(tmp_path, content, statu
     assert not pid_file.exists()
 
 
+@pytest.mark.skipif(not Path("/proc").exists(), reason="殭屍行程是 POSIX 行為，這裡靠 /proc 判斷")
+def test_process_exists_treats_unreaped_child_as_gone():
+    proc = subprocess.Popen([sys.executable, "-c", ""], stdin=subprocess.DEVNULL)
+    try:
+        # 不呼叫 wait／poll：子行程結束後維持殭屍狀態
+        assert wait_until(lambda: not process_exists(proc.pid))
+    finally:
+        proc.wait(timeout=WAIT)
+
+
 def test_force_kill_of_already_exited_process_is_harmless(tmp_path):
     pid_file = pid_file_path(tmp_path)
     proc = spawn_pid_writer(pid_file)

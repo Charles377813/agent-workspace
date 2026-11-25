@@ -15,6 +15,7 @@
 | 4 | 建立獨立 review skill | DONE (codex) | main | [tasks/04-independent-review-skill.md](tasks/04-independent-review-skill.md) |
 | 5 | HRMS 自然語言請假 Agent | DONE (claude) | feat/hrms-leave-agent（已合併 master） | [tasks/05-hrms-leave-agent.md](tasks/05-hrms-leave-agent.md) |
 | 6 | HRMS 請假 Agent 的 Gradio 對話 Demo | IN PROGRESS (claude) | feat/hrms-gradio-demo | [tasks/06-hrms-gradio-demo.md](tasks/06-hrms-gradio-demo.md) |
+| 7 | hrms-leave-agent 的 pytest 進 GitHub Actions（併修 Linux 殭屍行程誤判；動到 `.github/workflows/tests.yml`、`demo_worker.py`、`test_demo_lifecycle.py`；待辦：pip-audit 的 pillow 公告） | DONE (claude)（CI：Ubuntu 416 通過、Windows 415 通過 1 略過；Codex 唯讀審查無發現） | feat/ci-pytest | — |
 
 ## 交接
 
