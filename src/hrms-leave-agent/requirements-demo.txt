@@ -1,2 +1,2 @@
 -r requirements.txt
-gradio==6.27.0
+gradio==6.32.0
