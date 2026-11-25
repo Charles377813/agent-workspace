@@ -77,7 +77,20 @@ def process_exists(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    return True
+    return not _is_zombie(pid)
+
+
+def _is_zombie(pid: int) -> bool:
+    """行程已結束、只是父行程還沒回收（Linux 的 Z 狀態）：os.kill(pid, 0) 仍會成功，要當成不存在。
+
+    沒有 /proc 或讀不到時回 False（寧可當它還在）。
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_bytes()
+    except OSError:
+        return False
+    # 格式是「pid (comm) state ...」；comm 可含空格與括號，所以從最後一個 ) 之後取
+    return stat.rpartition(b")")[2].split()[:1] == [b"Z"]
 
 
 def process_command_line(pid: int) -> str | None:
