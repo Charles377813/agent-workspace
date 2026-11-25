@@ -369,6 +369,7 @@ finally: conn.close()
 ```
 hrms-leave-agent/
 ├── README.md
+├── GLOSSARY.md            ✅ 本專案用詞（假別、額度、試算…）
 ├── init_db.sql            ✅ 建表＋種子資料
 ├── requirements.txt       ✅
 ├── requirements.lock      ✅ 固定版本（78 個），pip-audit 掃描對象
